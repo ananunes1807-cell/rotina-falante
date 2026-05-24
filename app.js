@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v21';
+const APP_VERSION = 'v22';
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -176,10 +176,13 @@ function normalizeState(state){
     child.stars = Number(child.stars || 0);
     child.routines ||= emptyRoutines();
     child.done ||= {};
+    child.skipped ||= {};
     periods.forEach(p => child.routines[p.id] ||= []);
     periods.forEach(p => child.routines[p.id].forEach(task => {
       task.days = Array.isArray(task.days) ? task.days : [0,1,2,3,4,5,6];
       task.steps = Array.isArray(task.steps) ? task.steps : [];
+      task.message ||= '';
+      task.important = !!task.important;
     }));
   });
   return state;
@@ -401,7 +404,8 @@ function todayAgendaItems(){
           period,
           task,
           total: task.time ? timeToMinutes(task.time) : 9999,
-          done: isDone(child, task.id)
+          done: isDone(child, task.id),
+          skipped: isSkipped(child, task.id)
         });
       });
     });
@@ -412,7 +416,7 @@ function todayAgendaItems(){
 function renderMomDashboard(){
   if(!$('todayAgenda')) return;
   const items = todayAgendaItems();
-  const pending = items.filter(item => !item.done);
+  const pending = items.filter(item => !item.done && !item.skipped);
   const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
   const next = pending.find(item => item.total >= nowMin) || pending[0];
   $('nextAlarmCard').innerHTML = next ? `
@@ -423,7 +427,21 @@ function renderMomDashboard(){
   ` : '<div class="next-alarm-time">Tudo feito</div><div class="muted">Nenhuma tarefa pendente hoje.</div>';
   const alerts = momAlerts();
   $('momAlerts').innerHTML = alerts.length ? alerts.map(alert => `<div class="alert-line">${alert}</div>`).join('') : '<div class="alert-line good">Tudo certo por aqui.</div>';
+  $('momDaySummary').innerHTML = momSummaryHtml(items);
   $('todayAgenda').innerHTML = items.length ? items.map(item => agendaItemHtml(item)).join('') : '<div class="empty-state">Nenhuma tarefa marcada para hoje.</div>';
+}
+
+function momSummaryHtml(items){
+  const done = items.filter(item => item.done).length;
+  const skipped = items.filter(item => item.skipped).length;
+  const pending = items.length - done - skipped;
+  return `
+    <div class="summary-grid">
+      <div><strong>${done}</strong><span>feitas</span></div>
+      <div><strong>${pending}</strong><span>pendentes</span></div>
+      <div><strong>${skipped}</strong><span>puladas</span></div>
+    </div>
+  `;
 }
 
 function momAlerts(){
@@ -439,16 +457,17 @@ function momAlerts(){
 }
 
 function agendaItemHtml(item){
-  const status = item.done ? 'Feita' : item.total === 9999 ? 'Sem horário' : countdownText(item.total);
+  const status = item.done ? 'Feita' : item.skipped ? 'Pulada hoje' : item.total === 9999 ? 'Sem horário' : countdownText(item.total);
   return `
-    <div class="agenda-row ${item.done ? 'done' : ''}">
+    <div class="agenda-row period-${item.period.id} ${item.done ? 'done' : ''} ${item.skipped ? 'skipped' : ''} ${item.task.important ? 'important' : ''}">
       <div class="agenda-time">${item.task.time || '--:--'}</div>
       <div class="agenda-main">
-        <div class="task-name">${item.task.emoji || '✅'} ${escapeHtml(item.task.name)}</div>
+        <div class="task-name">${item.task.important ? '❗ ' : ''}${item.task.emoji || '✅'} ${escapeHtml(item.task.name)}</div>
         <div class="task-time">${item.child.avatar} ${escapeHtml(item.child.name)} · ${item.period.label} · ${status}</div>
       </div>
       <button class="secondary small-btn" data-edit-agenda="${item.child.id}">Editar</button>
       <button class="secondary small-btn" data-speak-agenda-task="${item.child.id}:${item.task.id}">🔊</button>
+      <button class="secondary small-btn" data-test-alarm="${item.child.id}:${item.period.id}:${item.task.id}">Teste</button>
     </div>
   `;
 }
@@ -630,16 +649,19 @@ function taskHtml(task, child){
   const tasks = child.routines[editingPeriod] || [];
   const index = tasks.findIndex(item => item.id === task.id);
   const steps = Array.isArray(task.steps) && task.steps.length ? `<div class="task-steps">${task.steps.map(step => `<span>${escapeHtml(step)}</span>`).join('')}</div>` : '';
+  const message = task.message ? `<div class="task-message">💬 ${escapeHtml(task.message)}</div>` : '';
   return `
-    <div class="task-item agenda-block ${done?'done':''}">
-      <div class="task-emoji">${task.emoji || '✅'}</div>
+    <div class="task-item agenda-block ${done?'done':''} ${task.important?'important':''}">
+      <div class="task-emoji">${task.important ? '❗' : (task.emoji || '✅')}</div>
       <div>
         <div class="task-name">${task.name}</div>
         <div class="task-time">${task.time || 'Sem horário'} · ${dayLabel}</div>
+        ${message}
         ${steps}
       </div>
       <div class="task-actions">
         <button class="secondary" data-load-task="${task.id}">Editar</button>
+        <button class="secondary" data-test-alarm="${child.id}:${editingPeriod}:${task.id}">Testar</button>
         <button class="secondary" data-move-task="${task.id}:-1" ${index===0?'disabled':''}>↑</button>
         <button class="secondary" data-move-task="${task.id}:1" ${index===tasks.length-1?'disabled':''}>↓</button>
         <button class="secondary" data-delete-task="${task.id}">Excluir</button>
@@ -668,7 +690,9 @@ function addTask(){
     name,
     time: $('taskTime').value,
     days: [...selectedTaskDays].sort((a,b) => a-b),
-    steps: $('taskSteps').value.split(',').map(step => step.trim()).filter(Boolean)
+    steps: $('taskSteps').value.split(',').map(step => step.trim()).filter(Boolean),
+    message: $('taskMessage').value.trim(),
+    important: $('taskImportant').checked
   };
   if(editingTaskId){
     const task = child.routines[editingPeriod].find(item => item.id === editingTaskId);
@@ -693,6 +717,8 @@ function loadTaskForEdit(taskId){
   $('taskName').value = task.name || '';
   $('taskTime').value = task.time || '';
   $('taskSteps').value = Array.isArray(task.steps) ? task.steps.join(', ') : '';
+  $('taskMessage').value = task.message || '';
+  $('taskImportant').checked = !!task.important;
   renderEditor();
   $('taskName').focus();
 }
@@ -705,6 +731,8 @@ function resetTaskForm(shouldRender=true){
   if($('taskName')) $('taskName').value = '';
   if($('taskTime')) $('taskTime').value = '';
   if($('taskSteps')) $('taskSteps').value = '';
+  if($('taskMessage')) $('taskMessage').value = '';
+  if($('taskImportant')) $('taskImportant').checked = false;
   if(shouldRender) renderEditor();
 }
 
@@ -811,9 +839,10 @@ function renderChild(){
   `;
   $('taskFocus').classList.toggle('waiting', !next);
   $('taskFocus').innerHTML = next ? `
-    <div class="focus-emoji">${next.emoji || '✅'}</div>
+    <div class="focus-emoji">${next.important ? '❗' : (next.emoji || '✅')}</div>
     <div class="focus-name">${next.name}</div>
     <div class="focus-time">${next.time || 'Sem horário'}</div>
+    ${next.message ? `<div class="focus-message">${escapeHtml(next.message)}</div>` : ''}
     ${taskStepsHtml(next)}
   ` : waiting ? `
     <div class="focus-emoji">${mascot.emoji}</div>
@@ -829,6 +858,9 @@ function renderChild(){
     $('doneBtn').disabled = !next;
     $('doneBtn').dataset.task = next?.id || '';
   }
+  if($('skipBtn')){
+    $('skipBtn').disabled = !next;
+  }
   const tasks = tasksForToday(child, period);
   $('todayList').innerHTML = tasks.map(task => childTaskHtml(task, child)).join('');
 }
@@ -841,7 +873,7 @@ function taskStepsHtml(task){
 function renderDailyBadge(child){
   if(!$('dailyBadge')) return;
   const todayTasks = periods.flatMap(period => tasksForToday(child, period.id));
-  const doneCount = todayTasks.filter(task => isDone(child, task.id)).length;
+  const doneCount = todayTasks.filter(task => isDone(child, task.id) || isSkipped(child, task.id)).length;
   const total = todayTasks.length;
   const complete = total > 0 && doneCount === total;
   $('dailyBadge').textContent = complete ? '🏅 Dia completo' : `⭐ ${doneCount}/${total} missões hoje`;
@@ -865,13 +897,14 @@ function renderStreakBadge(child){
 
 function childTaskHtml(task, child){
   const done = isDone(child, task.id);
+  const skipped = isSkipped(child, task.id);
   const steps = Array.isArray(task.steps) && task.steps.length ? `<div class="task-time">${task.steps.length} passinhos</div>` : '';
   return `
-    <div class="task-item ${done?'done':''}">
-      <div class="task-emoji">${done ? '✅' : (task.emoji || '✅')}</div>
+    <div class="task-item ${done?'done':''} ${skipped?'skipped':''} ${task.important?'important':''}">
+      <div class="task-emoji">${done ? '✅' : skipped ? '⏭️' : task.important ? '❗' : (task.emoji || '✅')}</div>
       <div>
         <div class="task-name">${task.name}</div>
-        <div class="task-time">${done ? 'Feita hoje' : (task.time || 'Sem horário')}</div>
+        <div class="task-time">${done ? 'Feita hoje' : skipped ? 'Pulada hoje' : (task.time || 'Sem horário')}</div>
         ${steps}
       </div>
       <button class="speak-part-btn" data-speak-task="${task.id}" title="Falar esta tarefa">🔊</button>
@@ -883,7 +916,7 @@ function speakTask(child, taskId){
   const task = periods.flatMap(period => child.routines[period.id] || []).find(item => item.id === taskId);
   if(!task) return;
   const steps = Array.isArray(task.steps) && task.steps.length ? ` Passinhos: ${task.steps.join(', ')}.` : '';
-  speak(`${child.name}, tarefa: ${task.name}.${task.time ? ' Horário: ' + task.time + '.' : ''}${steps}`);
+  speak(task.message || `${child.name}, tarefa: ${task.name}.${task.time ? ' Horário: ' + task.time + '.' : ''}${steps}`);
 }
 
 function speakTodayTasks(){
@@ -914,7 +947,7 @@ function countdownText(targetMin){
 }
 
 function nextTask(child, period){
-  return tasksForToday(child, period).find(task => !isDone(child, task.id));
+  return tasksForToday(child, period).find(task => !isDone(child, task.id) && !isSkipped(child, task.id));
 }
 
 function tasksForToday(child, period){
@@ -931,6 +964,7 @@ function nextUpcomingTask(child){
   periods.forEach(period => {
     tasksForToday(child, period.id).forEach(task => {
       if(isDone(child, task.id)) return;
+      if(isSkipped(child, task.id)) return;
       const total = task.time ? timeToMinutes(task.time) : 9999;
       if(total >= nowMin) options.push({ period, task, total });
     });
@@ -948,6 +982,10 @@ function isDone(child, taskId){
   return !!child.done?.[todayKey()]?.[taskId];
 }
 
+function isSkipped(child, taskId){
+  return !!child.skipped?.[todayKey()]?.[taskId];
+}
+
 function markDone(){
   const child = childById(selectedChildId);
   const taskId = $('doneBtn').dataset.task;
@@ -955,12 +993,25 @@ function markDone(){
   const task = periods.flatMap(period => child.routines[period.id] || []).find(item => item.id === taskId);
   child.done[todayKey()] ||= {};
   child.done[todayKey()][taskId] = true;
+  if(child.skipped?.[todayKey()]) delete child.skipped[todayKey()][taskId];
   child.stars = Number(child.stars || 0) + 1;
   if(persistentAlarm && persistentAlarm.task.id === taskId) persistentAlarm = null;
   scheduleSave();
   showCelebration(child, task);
   gentleAlarmSpeak(`Muito bem, ${child.name}! Missão concluída. Você ganhou uma estrela.`, child);
   renderChild();
+}
+
+function skipToday(){
+  const child = childById(selectedChildId);
+  const taskId = $('doneBtn').dataset.task;
+  if(!taskId) return;
+  child.skipped[todayKey()] ||= {};
+  child.skipped[todayKey()][taskId] = true;
+  if(persistentAlarm && persistentAlarm.task.id === taskId) persistentAlarm = null;
+  scheduleSave();
+  speak(`${child.name}, tarefa pulada só por hoje.`);
+  renderAll();
 }
 
 function showCelebration(child, task){
@@ -988,7 +1039,7 @@ function speakChild(child){
     return speak(`${dateSpeech()} ${child.name}, todas as tarefas foram feitas. Muito bem!`);
   }
   const steps = Array.isArray(task.steps) && task.steps.length ? ` Os passinhos são: ${task.steps.join(', ')}.` : '';
-  speak(`${dateSpeech()} ${child.name}, sua rotina de agora é ${periods.find(p => p.id === period).label}. Você tem que fazer: ${task.name}.${steps} ${task.time ? 'Horário: ' + task.time + '.' : ''}`);
+  speak(task.message || `${dateSpeech()} ${child.name}, sua rotina de agora é ${periods.find(p => p.id === period).label}. Você tem que fazer: ${task.name}.${steps} ${task.time ? 'Horário: ' + task.time + '.' : ''}`);
 }
 
 function speakCurrentMission(){
@@ -1002,12 +1053,30 @@ function speakCurrentMission(){
     return speak(`${child.name}, todas as tarefas de hoje foram feitas. Muito bem!`);
   }
   const steps = Array.isArray(task.steps) && task.steps.length ? ` Passinhos: ${task.steps.join(', ')}.` : '';
-  speak(`${child.name}, missão de agora: ${task.name}.${task.time ? ' Horário: ' + task.time + '.' : ''}${steps}`);
+  speak(task.message || `${child.name}, missão de agora: ${task.name}.${task.time ? ' Horário: ' + task.time + '.' : ''}${steps}`);
+}
+
+function alarmText(child, period, task){
+  return task.message || `${dateSpeech()} ${child.name}, chegou a hora com calma. Sua rotina de agora é ${period.label}. Agora é hora de ${task.name}.`;
+}
+
+function testFullAlarm(childId, periodId, taskId){
+  const child = childById(childId);
+  const period = periods.find(item => item.id === periodId) || periods.find(item => item.id === currentPeriod());
+  const task = (child.routines[period.id] || []).find(item => item.id === taskId);
+  if(!task) return;
+  gentleAlarmSpeak(alarmText(child, period, task), child);
 }
 
 function askForHelp(){
   const child = childById(selectedChildId);
   gentleAlarmSpeak(`${child.name} precisa de ajuda com a rotina.`, child);
+}
+
+function enterFullscreen(){
+  const target = $('childView') || document.documentElement;
+  if(document.fullscreenElement) return document.exitFullscreen?.();
+  target.requestFullscreen?.();
 }
 
 function dateSpeech(){
@@ -1115,7 +1184,7 @@ function tick(){
 }
 
 function checkTaskAlarms(){
-  if(persistentAlarm && !isDone(persistentAlarm.child, persistentAlarm.task.id)){
+  if(persistentAlarm && !isDone(persistentAlarm.child, persistentAlarm.task.id) && !isSkipped(persistentAlarm.child, persistentAlarm.task.id)){
     const now = Date.now();
     if(!persistentAlarm.lastReminderAt || now - persistentAlarm.lastReminderAt > 90000){
       persistentAlarm.lastReminderAt = now;
@@ -1123,7 +1192,7 @@ function checkTaskAlarms(){
     }
     return;
   }
-  if(persistentAlarm && isDone(persistentAlarm.child, persistentAlarm.task.id)) persistentAlarm = null;
+  if(persistentAlarm && (isDone(persistentAlarm.child, persistentAlarm.task.id) || isSkipped(persistentAlarm.child, persistentAlarm.task.id))) persistentAlarm = null;
   const now = new Date();
   const today = now.getDay();
   const current = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -1132,6 +1201,7 @@ function checkTaskAlarms(){
       (child.routines[period.id] || []).forEach(task => {
         if(!task.time || task.time !== current) return;
         if(task.days && !task.days.includes(today)) return;
+        if(isSkipped(child, task.id)) return;
         const key = `${todayKey()}_${child.id}_${task.id}_${current}`;
         if(firedAlarmKeys.has(key)) return;
         firedAlarmKeys.add(key);
@@ -1142,7 +1212,7 @@ function checkTaskAlarms(){
           localStorage.setItem('rf_mode', mode);
           renderAll();
         }
-        gentleAlarmSpeak(`${dateSpeech()} ${child.name}, chegou a hora com calma. Sua rotina de agora é ${period.label}. Agora é hora de ${task.name}.`, child);
+        gentleAlarmSpeak(alarmText(child, period, task), child);
       });
     });
   });
@@ -1198,11 +1268,13 @@ document.addEventListener('click', (event) => {
   };
   if(target.dataset.mode) return run(() => switchMode(target.dataset.mode));
   if(target.id === 'doneBtn') return run(markDone);
+  if(target.id === 'skipBtn') return run(skipToday);
   if(target.id === 'repeatBtn') return run(speakCurrentMission);
   if(target.id === 'speakTodayBtn') return run(speakTodayTasks);
   if(target.id === 'speakMomTodayBtn') return run(speakMomToday);
   if(target.id === 'copyRoutineBtn') return run(copyRoutine);
   if(target.id === 'stopSpeechBtn') return run(stopSpeaking);
+  if(target.id === 'fullscreenBtn') return run(enterFullscreen);
   if(target.id === 'helpBtn') return run(askForHelp);
   if(target.id === 'speakTimeBtn' || target.id === 'speakTimeBigBtn' || target.id === 'childSpeakTimeBtn') return run(speakTime);
   if(target.dataset.speakTask) return run(() => speakTask(childById(selectedChildId), target.dataset.speakTask));
@@ -1211,6 +1283,10 @@ document.addEventListener('click', (event) => {
     return run(() => speakTask(childById(childId), taskId));
   }
   if(target.dataset.editAgenda) return run(() => editAgendaProfile(target.dataset.editAgenda));
+  if(target.dataset.testAlarm){
+    const [childId, periodId, taskId] = target.dataset.testAlarm.split(':');
+    return run(() => testFullAlarm(childId, periodId, taskId));
+  }
   if(target.dataset.template) return run(() => applyTemplate(target.dataset.template));
 });
 function switchMode(nextMode){
