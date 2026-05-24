@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#3d7f91">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Rotina Falante">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon-192.png">
+  <title>Rotina Falante</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <h1>Rotina Falante</h1>
+        <p id="syncStatus">Configurando Firebase</p>
+      </div>
+      <button class="icon-btn" id="speakTimeBtn" title="Falar hora">🔊</button>
+    </header>
+
+    <main>
+      <section class="setup-panel" id="setupPanel">
+        <div class="section-title">Firebase</div>
+        <p class="muted">Cole a configuração do app Web do Firebase e escolha um código da família. A nova plataforma usa Cloud Firestore.</p>
+        <label>Configuração firebaseConfig</label>
+        <textarea id="firebaseConfig" spellcheck="false" placeholder='{"apiKey":"...","authDomain":"...","projectId":"alarme-falado","appId":"..."}'></textarea>
+        <label>Código da família</label>
+        <input id="familyCode" placeholder="familia-ana">
+        <label>Senha do modo mãe</label>
+        <input id="momPin" inputmode="numeric" maxlength="8" placeholder="1234">
+        <div class="setup-actions">
+          <button class="primary" id="connectBtn">Conectar Firestore</button>
+          <button class="secondary" id="clearConfigBtn">Limpar</button>
+        </div>
+      </section>
+
+      <section class="mode-panel" id="modePanel" hidden>
+        <div class="segmented">
+          <button class="active" data-mode="mom">Modo mãe</button>
+          <button data-mode="child">Modo criança</button>
+        </div>
+      </section>
+
+      <section id="momView" hidden>
+        <div class="toolbar">
+          <div>
+            <div class="section-title">Filhos e rotinas</div>
+            <p class="muted">Edite aqui. Os aparelhos das crianças atualizam automaticamente.</p>
+          </div>
+          <button class="primary" id="addChildBtn">Adicionar filho</button>
+        </div>
+        <div class="children-grid" id="childrenGrid"></div>
+
+        <div class="routine-editor" id="routineEditor" hidden>
+          <div class="editor-head">
+            <div>
+              <div class="section-title" id="editorTitle">Rotina</div>
+              <p class="muted" id="editorSubtitle"></p>
+            </div>
+            <button class="secondary" id="closeEditorBtn">Fechar</button>
+          </div>
+          <div class="period-tabs" id="periodTabs"></div>
+          <div class="task-form">
+            <input id="taskEmoji" maxlength="2" placeholder="✅">
+            <input id="taskName" placeholder="Nome da tarefa">
+            <input id="taskTime" type="time">
+            <button class="primary" id="addTaskBtn">Adicionar</button>
+          </div>
+          <div id="taskList"></div>
+        </div>
+      </section>
+
+      <section id="childView" hidden>
+        <div class="child-picker" id="childPicker"></div>
+        <div class="child-board">
+          <div class="child-clock" id="clock">00:00</div>
+          <div class="child-name" id="childName">Escolha uma criança</div>
+          <div class="child-period" id="childPeriod">Rotina de agora</div>
+          <div class="task-focus" id="taskFocus">
+            <div class="focus-emoji">⭐</div>
+            <div class="focus-name">Tudo pronto</div>
+            <div class="focus-time">Sem tarefa pendente</div>
+          </div>
+          <div class="child-actions">
+            <button class="primary" id="doneBtn">Já fiz</button>
+            <button class="secondary" id="repeatBtn">Falar de novo</button>
+          </div>
+        </div>
+        <div class="today-list" id="todayList"></div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
