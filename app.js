@@ -45,6 +45,7 @@ let firedAlarmKeys = new Set();
 let persistentAlarm = null;
 let timeAnnounceInterval = Number(localStorage.getItem('rf_timeAnnounceInterval') || 0);
 let timeAnnounceTimer = null;
+let audioContext = null;
 
 function loadLocalState(){
   const saved = localStorage.getItem('rf_state');
@@ -630,8 +631,38 @@ function speak(text){
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'pt-BR';
-  u.rate = .88;
+  u.rate = .84;
+  u.pitch = 1.08;
   speechSynthesis.speak(u);
+}
+
+function playSoftChime(){
+  try{
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if(!Ctx) return;
+    audioContext ||= new Ctx();
+    if(audioContext.state === 'suspended') audioContext.resume();
+    const now = audioContext.currentTime;
+    const notes = [523.25, 659.25, 783.99];
+    notes.forEach((freq, index) => {
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + index * 0.18);
+      gain.gain.exponentialRampToValueAtTime(0.045, now + index * 0.18 + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.18 + 0.55);
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.start(now + index * 0.18);
+      osc.stop(now + index * 0.18 + 0.6);
+    });
+  }catch(e){}
+}
+
+function gentleAlarmSpeak(text){
+  playSoftChime();
+  setTimeout(() => speak(text), 900);
 }
 
 function speakTime(){
@@ -671,7 +702,11 @@ function tick(){
 
 function checkTaskAlarms(){
   if(persistentAlarm && !isDone(persistentAlarm.child, persistentAlarm.task.id)){
-    speak(`${persistentAlarm.child.name}, ainda está na hora de ${persistentAlarm.task.name}. Aperte Já fiz quando terminar.`);
+    const now = Date.now();
+    if(!persistentAlarm.lastReminderAt || now - persistentAlarm.lastReminderAt > 90000){
+      persistentAlarm.lastReminderAt = now;
+      gentleAlarmSpeak(`${persistentAlarm.child.name}, lembrete calminho. Ainda está na hora de ${persistentAlarm.task.name}. Quando terminar, toque no botão Já fiz.`);
+    }
     return;
   }
   if(persistentAlarm && isDone(persistentAlarm.child, persistentAlarm.task.id)) persistentAlarm = null;
@@ -686,14 +721,14 @@ function checkTaskAlarms(){
         const key = `${todayKey()}_${child.id}_${task.id}_${current}`;
         if(firedAlarmKeys.has(key)) return;
         firedAlarmKeys.add(key);
-        persistentAlarm = { child, task, period };
+        persistentAlarm = { child, task, period, lastReminderAt: Date.now() };
         if(child.type !== 'mom'){
           selectedChildId = child.id;
           mode = 'child';
           localStorage.setItem('rf_mode', mode);
           renderAll();
         }
-        speak(`${dateSpeech()} ${child.name}, chegou a hora. Sua rotina de agora é ${period.label}. Você tem que fazer: ${task.name}.`);
+        gentleAlarmSpeak(`${dateSpeech()} ${child.name}, chegou a hora com calma. Sua rotina de agora é ${period.label}. Agora é hora de ${task.name}.`);
       });
     });
   });
