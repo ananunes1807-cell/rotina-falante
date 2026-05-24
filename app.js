@@ -227,6 +227,14 @@ function profileThemeById(id){
   return profileThemes.find(theme => theme.id === id) || profileThemes[0];
 }
 
+function applyChildPageTheme(child){
+  document.body.classList.remove('child-theme-active', ...profileThemes.map(theme => `profile-bg-${theme.id}`));
+  if(mode !== 'child' || !child) return;
+  const visual = profileThemeById(child.profileTheme);
+  document.documentElement.style.setProperty('--child-profile-bg', visual.bg);
+  document.body.classList.add('child-theme-active', `profile-bg-${visual.id}`);
+}
+
 function renderAll(){
   applyTheme(appState.theme);
   renderMode();
@@ -256,6 +264,7 @@ function renderMode(){
   document.querySelectorAll('.segmented button').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
   $('momView').hidden = mode !== 'mom';
   $('childView').hidden = mode !== 'child';
+  if(mode !== 'child') applyChildPageTheme(null);
 }
 
 function renderMom(){
@@ -509,7 +518,7 @@ function renderChild(){
   localStorage.setItem('rf_selectedChild', selectedChildId);
   const child = childById(selectedChildId);
   const visual = profileThemeById(child.profileTheme);
-  document.documentElement.style.setProperty('--child-profile-bg', visual.bg);
+  applyChildPageTheme(child);
   $('childPicker').innerHTML = visibleChildren.map(c => `<button class="${c.id===selectedChildId?'active':''}" data-pick-child="${c.id}">${c.avatar} ${c.name}</button>`).join('');
   document.querySelectorAll('[data-pick-child]').forEach(btn => btn.addEventListener('click', () => { selectedChildId = btn.dataset.pickChild; renderChild(); }));
   const age = childAge(child);

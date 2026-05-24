@@ -24,6 +24,18 @@ body.theme-ceu::before { content: '☁️ ☀️ ☁️'; }
 body.theme-arcoiris::before { content: '🌈 ✨ ⭐'; }
 body.theme-galaxia::before { content: '🪐 🚀 ✨'; color: #fff; }
 body.theme-jardim::before { content: '🌻 🌿 🦋'; }
+body.child-theme-active { background: var(--child-profile-bg); background-attachment: fixed; }
+body.child-theme-active::before { opacity: .32; align-items: flex-end; padding-bottom: 4vh; }
+body.profile-bg-bichinhos::before { content: '🐾 🧸 🐰'; }
+body.profile-bg-dinossauro::before { content: '🌴 🦕 🥚'; }
+body.profile-bg-princesa::before { content: '🌸 👑 💎'; }
+body.profile-bg-espaco::before { content: '🪐 🚀 ✨'; color: #fff; }
+body.profile-bg-mae::before { content: '☕ 📚 🌙'; }
+body.profile-bg-bichinhos .child-board { background: linear-gradient(135deg, rgba(215,248,220,.84), rgba(180,228,255,.84)); }
+body.profile-bg-dinossauro .child-board { background: linear-gradient(135deg, rgba(216,245,200,.84), rgba(126,217,87,.84)); }
+body.profile-bg-princesa .child-board { background: linear-gradient(135deg, rgba(255,225,241,.84), rgba(255,198,223,.84)); }
+body.profile-bg-espaco .child-board { background: linear-gradient(135deg, rgba(32,41,85,.9), rgba(104,119,255,.86)); color: #fff; }
+body.profile-bg-mae .child-board { background: linear-gradient(135deg, rgba(242,232,255,.86), rgba(216,199,255,.86)); }
 button, input, textarea, select { font: inherit; }
 .app-shell { max-width: 1080px; margin: 0 auto; padding: 16px 16px 40px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
@@ -116,7 +128,7 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .child-picker { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 12px; }
 .child-picker button { background: var(--surface); color: var(--text); border: 2px solid var(--line); white-space: nowrap; }
 .child-picker button.active { border-color: var(--green); color: var(--green); background: rgba(60,155,109,.12); }
-.child-board { text-align: center; background: var(--child-profile-bg); }
+.child-board { text-align: center; background: var(--child-profile-bg); backdrop-filter: blur(2px); }
 .child-clock { color: var(--accent); font-size: clamp(2.8rem, 14vw, 5.5rem); font-weight: 900; line-height: 1; }
 .child-name { font-size: clamp(1.2rem, 5vw, 2rem); font-weight: 900; margin-top: 6px; }
 .child-period { color: var(--muted); font-weight: 900; margin-bottom: 16px; }
