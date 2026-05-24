@@ -2,6 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
 const $ = (id) => document.getElementById(id);
+const APP_VERSION = 'v15';
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -577,7 +578,6 @@ function renderChild(){
   }
   const tasks = tasksForToday(child, period);
   $('todayList').innerHTML = tasks.map(task => childTaskHtml(task, child)).join('');
-  document.querySelectorAll('[data-speak-task]').forEach(btn => btn.addEventListener('click', () => speakTask(child, btn.dataset.speakTask)));
 }
 
 function taskStepsHtml(task){
@@ -727,6 +727,7 @@ function dateSpeech(){
 }
 
 function speak(text){
+  if(!('speechSynthesis' in window)) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'pt-BR';
@@ -871,27 +872,39 @@ $('clearConfigBtn').addEventListener('click', clearConfig);
 $('addChildBtn').addEventListener('click', addChild);
 $('closeEditorBtn').addEventListener('click', () => { editingChildId = ''; $('routineEditor').hidden = true; });
 $('addTaskBtn').addEventListener('click', addTask);
-if($('doneBtn')) $('doneBtn').addEventListener('click', markDone);
-if($('repeatBtn')) $('repeatBtn').addEventListener('click', () => speakChild(childById(selectedChildId)));
-if($('speakTodayBtn')) $('speakTodayBtn').addEventListener('click', speakTodayTasks);
-if($('helpBtn')) $('helpBtn').addEventListener('click', askForHelp);
-if($('speakTimeBtn')) $('speakTimeBtn').addEventListener('click', speakTime);
-if($('speakTimeBigBtn')) $('speakTimeBigBtn').addEventListener('click', speakTime);
-if($('childSpeakTimeBtn')) $('childSpeakTimeBtn').addEventListener('click', speakTime);
 if($('timeAnnounceInterval')) $('timeAnnounceInterval').addEventListener('change', () => setTimeAnnounceInterval($('timeAnnounceInterval').value));
-document.querySelectorAll('.segmented button').forEach(btn => btn.addEventListener('click', () => {
-  if(mode === 'child' && btn.dataset.mode === 'mom'){
+document.addEventListener('click', (event) => {
+  const target = event.target.closest('button');
+  if(!target) return;
+  if(target.dataset.mode) return switchMode(target.dataset.mode);
+  if(target.id === 'doneBtn') return markDone();
+  if(target.id === 'repeatBtn') return speakChild(childById(selectedChildId));
+  if(target.id === 'speakTodayBtn') return speakTodayTasks();
+  if(target.id === 'helpBtn') return askForHelp();
+  if(target.id === 'speakTimeBtn' || target.id === 'speakTimeBigBtn' || target.id === 'childSpeakTimeBtn') return speakTime();
+  if(target.dataset.speakTask) return speakTask(childById(selectedChildId), target.dataset.speakTask);
+});
+function switchMode(nextMode){
+  if(mode === 'child' && nextMode === 'mom'){
     const pin = prompt('Senha do modo mãe:');
     if(pin !== momPin) return;
   }
-  mode = btn.dataset.mode;
+  mode = nextMode;
   localStorage.setItem('rf_mode', mode);
   renderAll();
-}));
+}
 setInterval(tick, 1000);
 setInterval(checkTaskAlarms, 30000);
 tick();
 startTimeAnnouncer();
 if(defaultConfigText && familyCode) connectFirebase();
 else renderAll();
-if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+if('serviceWorker' in navigator){
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register(`./sw.js?${APP_VERSION}`).then(reg => reg.update()).catch(()=>{});
+}
