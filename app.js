@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v20';
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -110,6 +110,7 @@ let selectedChildId = localStorage.getItem('rf_selectedChild') || '';
 let selectedProfileTab = localStorage.getItem('rf_profileTab') || 'children';
 let editingChildId = '';
 let editingPeriod = 'manha';
+let editingTaskId = '';
 let selectedTaskDays = new Set([0,1,2,3,4,5,6]);
 let selectedTaskEmoji = '✅';
 let firedAlarmKeys = new Set();
@@ -559,6 +560,7 @@ function removeChild(id){
 function openEditor(id){
   editingChildId = id;
   editingPeriod = currentPeriod();
+  resetTaskForm(false);
   $('routineEditor').hidden = false;
   renderEditor();
   $('routineEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -575,11 +577,14 @@ function renderEditor(){
   $('profileCalendar').innerHTML = renderProfileCalendar(child);
   $('periodTabs').innerHTML = periods.map(p => `<button class="${p.id===editingPeriod?'active':''}" data-period="${p.id}">${p.emoji} ${p.label}</button>`).join('');
   bindChildCards();
-  document.querySelectorAll('[data-period]').forEach(btn => btn.addEventListener('click', () => { editingPeriod = btn.dataset.period; renderEditor(); }));
+  document.querySelectorAll('[data-period]').forEach(btn => btn.addEventListener('click', () => { editingPeriod = btn.dataset.period; resetTaskForm(false); renderEditor(); }));
+  $('addTaskBtn').textContent = editingTaskId ? 'Salvar' : 'Adicionar';
+  $('cancelTaskEditBtn').hidden = !editingTaskId;
   renderEmojiPicker();
   renderWeekdayPicker();
   const tasks = child.routines[editingPeriod] || [];
   $('taskList').innerHTML = tasks.length ? tasks.map(task => taskHtml(task, child)).join('') : '<p class="muted">Sem tarefas neste período.</p>';
+  document.querySelectorAll('[data-load-task]').forEach(btn => btn.addEventListener('click', () => loadTaskForEdit(btn.dataset.loadTask)));
   document.querySelectorAll('[data-delete-task]').forEach(btn => btn.addEventListener('click', () => deleteTask(btn.dataset.deleteTask)));
   document.querySelectorAll('[data-move-task]').forEach(btn => btn.addEventListener('click', () => {
     const [taskId, dir] = btn.dataset.moveTask.split(':');
@@ -614,6 +619,7 @@ function taskHtml(task, child){
         ${steps}
       </div>
       <div class="task-actions">
+        <button class="secondary" data-load-task="${task.id}">Editar</button>
         <button class="secondary" data-move-task="${task.id}:-1" ${index===0?'disabled':''}>↑</button>
         <button class="secondary" data-move-task="${task.id}:1" ${index===tasks.length-1?'disabled':''}>↓</button>
         <button class="secondary" data-delete-task="${task.id}">Excluir</button>
@@ -637,27 +643,55 @@ function addTask(){
   const name = $('taskName').value.trim();
   if(!name) return;
   const child = childById(editingChildId);
-  child.routines[editingPeriod].push({
-    id: crypto.randomUUID(),
+  const taskData = {
     emoji: selectedTaskEmoji || '✅',
     name,
     time: $('taskTime').value,
     days: [...selectedTaskDays].sort((a,b) => a-b),
     steps: $('taskSteps').value.split(',').map(step => step.trim()).filter(Boolean)
-  });
-  selectedTaskEmoji = '✅';
-  $('taskEmoji').value = selectedTaskEmoji;
-  $('taskName').value = '';
-  $('taskTime').value = '';
-  $('taskSteps').value = '';
+  };
+  if(editingTaskId){
+    const task = child.routines[editingPeriod].find(item => item.id === editingTaskId);
+    if(task) Object.assign(task, taskData);
+  } else {
+    child.routines[editingPeriod].push({ id: crypto.randomUUID(), ...taskData });
+  }
+  resetTaskForm(false);
   scheduleSave();
   renderEditor();
   renderChild();
 }
 
+function loadTaskForEdit(taskId){
+  const child = childById(editingChildId);
+  const task = (child.routines[editingPeriod] || []).find(item => item.id === taskId);
+  if(!task) return;
+  editingTaskId = task.id;
+  selectedTaskEmoji = task.emoji || '✅';
+  selectedTaskDays = new Set(Array.isArray(task.days) && task.days.length ? task.days : [0,1,2,3,4,5,6]);
+  $('taskEmoji').value = selectedTaskEmoji;
+  $('taskName').value = task.name || '';
+  $('taskTime').value = task.time || '';
+  $('taskSteps').value = Array.isArray(task.steps) ? task.steps.join(', ') : '';
+  renderEditor();
+  $('taskName').focus();
+}
+
+function resetTaskForm(shouldRender=true){
+  editingTaskId = '';
+  selectedTaskEmoji = '✅';
+  selectedTaskDays = new Set([0,1,2,3,4,5,6]);
+  if($('taskEmoji')) $('taskEmoji').value = selectedTaskEmoji;
+  if($('taskName')) $('taskName').value = '';
+  if($('taskTime')) $('taskTime').value = '';
+  if($('taskSteps')) $('taskSteps').value = '';
+  if(shouldRender) renderEditor();
+}
+
 function deleteTask(taskId){
   const child = childById(editingChildId);
   child.routines[editingPeriod] = child.routines[editingPeriod].filter(t => t.id !== taskId);
+  if(editingTaskId === taskId) resetTaskForm(false);
   scheduleSave();
   renderEditor();
   renderChild();
@@ -1119,6 +1153,7 @@ $('clearConfigBtn').addEventListener('click', clearConfig);
 $('addChildBtn').addEventListener('click', addChild);
 $('closeEditorBtn').addEventListener('click', () => { editingChildId = ''; $('routineEditor').hidden = true; });
 $('addTaskBtn').addEventListener('click', addTask);
+$('cancelTaskEditBtn').addEventListener('click', () => resetTaskForm(true));
 if($('timeAnnounceInterval')) $('timeAnnounceInterval').addEventListener('change', () => setTimeAnnounceInterval($('timeAnnounceInterval').value));
 document.addEventListener('click', (event) => {
   const target = event.target.closest('button');

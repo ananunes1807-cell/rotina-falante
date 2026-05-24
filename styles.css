@@ -130,7 +130,7 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .period-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 14px 0; }
 .period-tabs button { background: #e5f1ef; color: var(--muted); }
 .period-tabs button.active { background: var(--yellow); color: #4a3600; }
-.task-form { display: grid; grid-template-columns: 62px 1fr 120px auto; gap: 8px; margin-bottom: 8px; }
+.task-form { display: grid; grid-template-columns: 62px 1fr 120px auto auto; gap: 8px; margin-bottom: 8px; }
 .steps-input { margin-bottom: 12px; }
 .weekday-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .weekday-btn { width: 44px; padding: 9px 0; background: #e5f1ef; color: var(--muted); border: 2px solid var(--line); }
