@@ -48,6 +48,13 @@
       </section>
 
       <section id="momView" hidden>
+        <div class="settings-strip">
+          <div>
+            <div class="section-title">Temas</div>
+            <p class="muted">Escolha o visual do app.</p>
+          </div>
+          <div class="theme-picker" id="themePicker"></div>
+        </div>
         <div class="toolbar">
           <div>
             <div class="section-title">Filhos e rotinas</div>
@@ -72,6 +79,7 @@
             <input id="taskTime" type="time">
             <button class="primary" id="addTaskBtn">Adicionar</button>
           </div>
+          <div class="weekday-picker" id="weekdayPicker"></div>
           <div id="taskList"></div>
         </div>
       </section>
@@ -82,6 +90,7 @@
           <div class="child-clock" id="clock">00:00</div>
           <div class="child-name" id="childName">Escolha uma criança</div>
           <div class="child-period" id="childPeriod">Rotina de agora</div>
+          <div class="child-stars" id="childStars">⭐ 0</div>
           <div class="task-focus" id="taskFocus">
             <div class="focus-emoji">⭐</div>
             <div class="focus-name">Tudo pronto</div>

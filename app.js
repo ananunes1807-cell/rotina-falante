@@ -7,6 +7,15 @@ const periods = [
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
   { id: 'noite', label: 'Noite', emoji: '🌙' },
 ];
+const weekDays = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const longWeekDays = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+const months = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const themes = [
+  { id:'ceu', label:'Céu', emoji:'💙' },
+  { id:'arcoiris', label:'Arco-íris', emoji:'🌈' },
+  { id:'galaxia', label:'Galáxia', emoji:'🚀' },
+  { id:'jardim', label:'Jardim', emoji:'🌿' },
+];
 const defaultConfigText = localStorage.getItem('rf_firebaseConfig') || '';
 let familyCode = localStorage.getItem('rf_familyCode') || '';
 let momPin = localStorage.getItem('rf_momPin') || '1234';
@@ -20,6 +29,8 @@ let mode = localStorage.getItem('rf_mode') || 'mom';
 let selectedChildId = localStorage.getItem('rf_selectedChild') || '';
 let editingChildId = '';
 let editingPeriod = 'manha';
+let selectedTaskDays = new Set([0,1,2,3,4,5,6]);
+let firedAlarmKeys = new Set();
 
 function loadLocalState(){
   const saved = localStorage.getItem('rf_state');
@@ -27,6 +38,7 @@ function loadLocalState(){
     try { return normalizeState(JSON.parse(saved)); } catch(e) {}
   }
   return normalizeState({
+    theme: 'ceu',
     children: [
       { id: crypto.randomUUID(), name: 'Criança', birthDate: '', avatar: '⭐', routines: emptyRoutines(), done: {} }
     ],
@@ -37,19 +49,20 @@ function loadLocalState(){
 function emptyRoutines(){
   return {
     manha: [
-      { id: crypto.randomUUID(), emoji: '🦷', name: 'Escovar os dentes', time: '07:30' },
-      { id: crypto.randomUUID(), emoji: '🎒', name: 'Pegar mochila', time: '07:50' }
+      { id: crypto.randomUUID(), emoji: '🦷', name: 'Escovar os dentes', time: '07:30', days: [1,2,3,4,5] },
+      { id: crypto.randomUUID(), emoji: '🎒', name: 'Pegar mochila', time: '07:50', days: [1,2,3,4,5] }
     ],
     tarde: [
-      { id: crypto.randomUUID(), emoji: '📚', name: 'Fazer tarefa', time: '14:30' }
+      { id: crypto.randomUUID(), emoji: '📚', name: 'Fazer tarefa', time: '14:30', days: [1,2,3,4,5] }
     ],
     noite: [
-      { id: crypto.randomUUID(), emoji: '😴', name: 'Dormir', time: '20:30' }
+      { id: crypto.randomUUID(), emoji: '😴', name: 'Dormir', time: '20:30', days: [0,1,2,3,4,5,6] }
     ]
   };
 }
 
 function normalizeState(state){
+  state.theme ||= 'ceu';
   state.children = Array.isArray(state.children) ? state.children : [];
   if(!state.children.length) state.children.push({ id: crypto.randomUUID(), name:'Criança', birthDate:'', avatar:'⭐', routines: emptyRoutines(), done:{} });
   state.children.forEach(child => {
@@ -59,9 +72,13 @@ function normalizeState(state){
     child.manualAge = child.manualAge ?? child.age ?? '';
     delete child.age;
     child.avatar ||= '⭐';
+    child.stars = Number(child.stars || 0);
     child.routines ||= emptyRoutines();
     child.done ||= {};
     periods.forEach(p => child.routines[p.id] ||= []);
+    periods.forEach(p => child.routines[p.id].forEach(task => {
+      task.days = Array.isArray(task.days) ? task.days : [0,1,2,3,4,5,6];
+    }));
   });
   return state;
 }
@@ -176,9 +193,27 @@ function childById(id){
 }
 
 function renderAll(){
+  applyTheme(appState.theme);
   renderMode();
+  renderThemes();
   renderMom();
   renderChild();
+}
+
+function applyTheme(themeId){
+  document.body.classList.remove(...themes.map(t => `theme-${t.id}`));
+  document.body.classList.add(`theme-${themeId || 'ceu'}`);
+}
+
+function renderThemes(){
+  const picker = $('themePicker');
+  if(!picker) return;
+  picker.innerHTML = themes.map(t => `<button class="theme-chip ${appState.theme===t.id?'active':''}" data-theme="${t.id}">${t.emoji} ${t.label}</button>`).join('');
+  document.querySelectorAll('[data-theme]').forEach(btn => btn.addEventListener('click', () => {
+    appState.theme = btn.dataset.theme;
+    scheduleSave();
+    renderAll();
+  }));
 }
 
 function renderMode(){
@@ -194,7 +229,7 @@ function renderMom(){
         <div class="avatar">${child.avatar}</div>
         <div>
           <div class="task-name">${child.name}</div>
-          <div class="task-time">${ageText(child)}</div>
+          <div class="task-time">${ageText(child)} · ⭐ ${child.stars || 0}</div>
         </div>
       </div>
       <div class="child-fields">
@@ -253,6 +288,7 @@ function renderEditor(){
   $('editorSubtitle').textContent = ageText(child);
   $('periodTabs').innerHTML = periods.map(p => `<button class="${p.id===editingPeriod?'active':''}" data-period="${p.id}">${p.emoji} ${p.label}</button>`).join('');
   document.querySelectorAll('[data-period]').forEach(btn => btn.addEventListener('click', () => { editingPeriod = btn.dataset.period; renderEditor(); }));
+  renderWeekdayPicker();
   const tasks = child.routines[editingPeriod] || [];
   $('taskList').innerHTML = tasks.length ? tasks.map(task => taskHtml(task, child)).join('') : '<p class="muted">Sem tarefas neste período.</p>';
   document.querySelectorAll('[data-delete-task]').forEach(btn => btn.addEventListener('click', () => deleteTask(btn.dataset.deleteTask)));
@@ -260,16 +296,27 @@ function renderEditor(){
 
 function taskHtml(task, child){
   const done = isDone(child, task.id);
+  const dayLabel = (task.days || []).length === 7 ? 'Todos os dias' : (task.days || []).map(d => weekDays[d]).join(', ');
   return `
     <div class="task-item ${done?'done':''}">
       <div class="task-emoji">${task.emoji || '✅'}</div>
       <div>
         <div class="task-name">${task.name}</div>
-        <div class="task-time">${task.time || 'Sem horário'}</div>
+        <div class="task-time">${task.time || 'Sem horário'} · ${dayLabel}</div>
       </div>
       <button class="secondary" data-delete-task="${task.id}">Excluir</button>
     </div>
   `;
+}
+
+function renderWeekdayPicker(){
+  $('weekdayPicker').innerHTML = weekDays.map((day, idx) => `<button class="weekday-btn ${selectedTaskDays.has(idx)?'active':''}" data-weekday="${idx}">${day}</button>`).join('');
+  document.querySelectorAll('[data-weekday]').forEach(btn => btn.addEventListener('click', () => {
+    const day = Number(btn.dataset.weekday);
+    if(selectedTaskDays.has(day) && selectedTaskDays.size > 1) selectedTaskDays.delete(day);
+    else selectedTaskDays.add(day);
+    renderWeekdayPicker();
+  }));
 }
 
 function addTask(){
@@ -281,7 +328,8 @@ function addTask(){
     id: crypto.randomUUID(),
     emoji: $('taskEmoji').value || '✅',
     name,
-    time: $('taskTime').value
+    time: $('taskTime').value,
+    days: [...selectedTaskDays].sort((a,b) => a-b)
   });
   $('taskEmoji').value = '';
   $('taskName').value = '';
@@ -307,13 +355,19 @@ function renderChild(){
   document.querySelectorAll('[data-pick-child]').forEach(btn => btn.addEventListener('click', () => { selectedChildId = btn.dataset.pickChild; renderChild(); }));
   const age = childAge(child);
   $('childName').textContent = `${child.avatar} ${child.name}${age !== '' ? ' · ' + age + ' anos' : ''}`;
+  $('childStars').textContent = `⭐ ${child.stars || 0}`;
   const period = currentPeriod();
   $('childPeriod').textContent = `Rotina da ${periods.find(p => p.id === period).label.toLowerCase()}`;
   const next = nextTask(child, period);
+  const waiting = next ? null : nextUpcomingTask(child);
   $('taskFocus').innerHTML = next ? `
     <div class="focus-emoji">${next.emoji || '✅'}</div>
     <div class="focus-name">${next.name}</div>
     <div class="focus-time">${next.time || 'Sem horário'}</div>
+  ` : waiting ? `
+    <div class="focus-emoji">⏳</div>
+    <div class="focus-name">Modo espera</div>
+    <div class="focus-time">Próxima: ${waiting.task.name} ${waiting.task.time ? 'às ' + waiting.task.time : ''}</div>
   ` : `
     <div class="focus-emoji">⭐</div>
     <div class="focus-name">Tudo pronto</div>
@@ -321,7 +375,7 @@ function renderChild(){
   `;
   $('doneBtn').disabled = !next;
   $('doneBtn').dataset.task = next?.id || '';
-  const tasks = child.routines[period] || [];
+  const tasks = tasksForToday(child, period);
   $('todayList').innerHTML = tasks.map(task => childTaskHtml(task, child)).join('');
 }
 
@@ -340,7 +394,34 @@ function childTaskHtml(task, child){
 }
 
 function nextTask(child, period){
-  return (child.routines[period] || []).find(task => !isDone(child, task.id));
+  return tasksForToday(child, period).find(task => !isDone(child, task.id));
+}
+
+function tasksForToday(child, period){
+  const today = new Date().getDay();
+  return (child.routines[period] || [])
+    .filter(task => !task.days || task.days.includes(today))
+    .sort((a,b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+}
+
+function nextUpcomingTask(child){
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const options = [];
+  periods.forEach(period => {
+    tasksForToday(child, period.id).forEach(task => {
+      if(isDone(child, task.id)) return;
+      const total = task.time ? timeToMinutes(task.time) : 9999;
+      if(total >= nowMin) options.push({ period, task, total });
+    });
+  });
+  options.sort((a,b) => a.total - b.total);
+  return options[0] || null;
+}
+
+function timeToMinutes(time){
+  const [h,m] = String(time || '00:00').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
 }
 
 function isDone(child, taskId){
@@ -353,16 +434,26 @@ function markDone(){
   if(!taskId) return;
   child.done[todayKey()] ||= {};
   child.done[todayKey()][taskId] = true;
+  child.stars = Number(child.stars || 0) + 1;
   scheduleSave();
-  speak('Muito bem! Tarefa concluída.');
+  speak(`Muito bem! Tarefa concluída. Você ganhou uma estrela. Agora você tem ${child.stars} estrelas.`);
   renderChild();
 }
 
 function speakChild(child){
   const period = currentPeriod();
   const task = nextTask(child, period);
-  if(!task) return speak(`${child.name}, todas as tarefas foram feitas. Muito bem!`);
-  speak(`${child.name}, agora é hora de ${task.name}. ${task.time ? 'Horário: ' + task.time + '.' : ''}`);
+  if(!task){
+    const waiting = nextUpcomingTask(child);
+    if(waiting) return speak(`${dateSpeech()} ${child.name}, sua rotina de agora está completa. Modo espera. A próxima tarefa é ${waiting.task.name}${waiting.task.time ? ' às ' + waiting.task.time : ''}.`);
+    return speak(`${dateSpeech()} ${child.name}, todas as tarefas foram feitas. Muito bem!`);
+  }
+  speak(`${dateSpeech()} ${child.name}, sua rotina de agora é ${periods.find(p => p.id === period).label}. Você tem que fazer: ${task.name}. ${task.time ? 'Horário: ' + task.time + '.' : ''}`);
+}
+
+function dateSpeech(){
+  const d = new Date();
+  return `Hoje é ${longWeekDays[d.getDay()]}, dia ${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}.`;
 }
 
 function speak(text){
@@ -375,12 +466,30 @@ function speak(text){
 
 function speakTime(){
   const d = new Date();
-  speak(`Agora são ${String(d.getHours()).padStart(2,'0')} horas e ${String(d.getMinutes()).padStart(2,'0')} minutos.`);
+  speak(`${dateSpeech()} Agora são ${String(d.getHours()).padStart(2,'0')} horas e ${String(d.getMinutes()).padStart(2,'0')} minutos.`);
 }
 
 function tick(){
   const d = new Date();
   $('clock').textContent = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function checkTaskAlarms(){
+  const now = new Date();
+  const today = now.getDay();
+  const current = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  appState.children.forEach(child => {
+    periods.forEach(period => {
+      (child.routines[period.id] || []).forEach(task => {
+        if(!task.time || task.time !== current) return;
+        if(task.days && !task.days.includes(today)) return;
+        const key = `${todayKey()}_${child.id}_${task.id}_${current}`;
+        if(firedAlarmKeys.has(key)) return;
+        firedAlarmKeys.add(key);
+        speak(`${dateSpeech()} ${child.name}, chegou a hora. Sua rotina de agora é ${period.label}. Você tem que fazer: ${task.name}.`);
+      });
+    });
+  });
 }
 
 function escapeAttr(value){
@@ -423,6 +532,7 @@ document.querySelectorAll('.segmented button').forEach(btn => btn.addEventListen
   renderAll();
 }));
 setInterval(tick, 1000);
+setInterval(checkTaskAlarms, 30000);
 tick();
 if(defaultConfigText && familyCode) connectFirebase();
 else renderAll();
