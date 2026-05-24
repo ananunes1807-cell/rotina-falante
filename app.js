@@ -10,6 +10,7 @@ const periods = [
 const weekDays = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const longWeekDays = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
 const months = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const taskEmojis = ['✅','🦷','🚿','👕','🍽️','🍎','💊','📚','🎒','🧹','🛁','🎮','📖','😴','☕','🚗','🧘','⭐'];
 const themes = [
   { id:'ceu', label:'Céu', emoji:'💙' },
   { id:'arcoiris', label:'Arco-íris', emoji:'🌈' },
@@ -37,7 +38,9 @@ let selectedChildId = localStorage.getItem('rf_selectedChild') || '';
 let editingChildId = '';
 let editingPeriod = 'manha';
 let selectedTaskDays = new Set([0,1,2,3,4,5,6]);
+let selectedTaskEmoji = '✅';
 let firedAlarmKeys = new Set();
+let persistentAlarm = null;
 
 function loadLocalState(){
   const saved = localStorage.getItem('rf_state');
@@ -324,10 +327,23 @@ function renderEditor(){
   $('editorSubtitle').textContent = ageText(child);
   $('periodTabs').innerHTML = periods.map(p => `<button class="${p.id===editingPeriod?'active':''}" data-period="${p.id}">${p.emoji} ${p.label}</button>`).join('');
   document.querySelectorAll('[data-period]').forEach(btn => btn.addEventListener('click', () => { editingPeriod = btn.dataset.period; renderEditor(); }));
+  renderEmojiPicker();
   renderWeekdayPicker();
   const tasks = child.routines[editingPeriod] || [];
   $('taskList').innerHTML = tasks.length ? tasks.map(task => taskHtml(task, child)).join('') : '<p class="muted">Sem tarefas neste período.</p>';
   document.querySelectorAll('[data-delete-task]').forEach(btn => btn.addEventListener('click', () => deleteTask(btn.dataset.deleteTask)));
+}
+
+function renderEmojiPicker(){
+  const picker = $('emojiPicker');
+  if(!picker) return;
+  $('taskEmoji').value = selectedTaskEmoji;
+  picker.innerHTML = taskEmojis.map(emoji => `<button class="emoji-choice ${emoji===selectedTaskEmoji?'active':''}" data-task-emoji="${emoji}">${emoji}</button>`).join('');
+  document.querySelectorAll('[data-task-emoji]').forEach(btn => btn.addEventListener('click', () => {
+    selectedTaskEmoji = btn.dataset.taskEmoji;
+    $('taskEmoji').value = selectedTaskEmoji;
+    renderEmojiPicker();
+  }));
 }
 
 function taskHtml(task, child){
@@ -362,12 +378,13 @@ function addTask(){
   const child = childById(editingChildId);
   child.routines[editingPeriod].push({
     id: crypto.randomUUID(),
-    emoji: $('taskEmoji').value || '✅',
+    emoji: selectedTaskEmoji || '✅',
     name,
     time: $('taskTime').value,
     days: [...selectedTaskDays].sort((a,b) => a-b)
   });
-  $('taskEmoji').value = '';
+  selectedTaskEmoji = '✅';
+  $('taskEmoji').value = selectedTaskEmoji;
   $('taskName').value = '';
   $('taskTime').value = '';
   scheduleSave();
@@ -475,6 +492,7 @@ function markDone(){
   child.done[todayKey()] ||= {};
   child.done[todayKey()][taskId] = true;
   child.stars = Number(child.stars || 0) + 1;
+  if(persistentAlarm && persistentAlarm.task.id === taskId) persistentAlarm = null;
   scheduleSave();
   speak(`Muito bem! Tarefa concluída. Você ganhou uma estrela. Agora você tem ${child.stars} estrelas.`);
   renderChild();
@@ -511,10 +529,18 @@ function speakTime(){
 
 function tick(){
   const d = new Date();
+  const timeText = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+  if($('momClock')) $('momClock').textContent = timeText;
+  if($('momDate')) $('momDate').textContent = `${longWeekDays[d.getDay()]}, ${d.getDate()} de ${months[d.getMonth()]}`;
   $('clock').textContent = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
 function checkTaskAlarms(){
+  if(persistentAlarm && !isDone(persistentAlarm.child, persistentAlarm.task.id)){
+    speak(`${persistentAlarm.child.name}, ainda está na hora de ${persistentAlarm.task.name}. Aperte Já fiz quando terminar.`);
+    return;
+  }
+  if(persistentAlarm && isDone(persistentAlarm.child, persistentAlarm.task.id)) persistentAlarm = null;
   const now = new Date();
   const today = now.getDay();
   const current = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -526,6 +552,13 @@ function checkTaskAlarms(){
         const key = `${todayKey()}_${child.id}_${task.id}_${current}`;
         if(firedAlarmKeys.has(key)) return;
         firedAlarmKeys.add(key);
+        persistentAlarm = { child, task, period };
+        if(child.type !== 'mom'){
+          selectedChildId = child.id;
+          mode = 'child';
+          localStorage.setItem('rf_mode', mode);
+          renderAll();
+        }
         speak(`${dateSpeech()} ${child.name}, chegou a hora. Sua rotina de agora é ${period.label}. Você tem que fazer: ${task.name}.`);
       });
     });

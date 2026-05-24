@@ -13,15 +13,18 @@
   --child-profile-bg: linear-gradient(135deg,#d7f8dc,#b4e4ff);
   font-family: Nunito, system-ui, sans-serif;
 }
-body.theme-ceu { --bg:#eef7f6; --surface:#ffffff; --line:#cfe3df; --text:#18373a; --muted:#668187; --accent:#3d7f91; --accent-2:#216171; --green:#3c9b6d; --yellow:#f2bc42; }
-body.theme-arcoiris { --bg:#fff7ec; --surface:#ffffff; --line:#f3d7b6; --text:#3c2440; --muted:#8a6670; --accent:#e35d5b; --accent-2:#8d5bd6; --green:#2f9e72; --yellow:#f5c542; }
-body.theme-galaxia { --bg:#10162f; --surface:#182145; --line:#33406b; --text:#f2f4ff; --muted:#aeb8df; --accent:#8f9bff; --accent-2:#5364d9; --green:#70d6a6; --yellow:#ffd66b; }
-body.theme-jardim { --bg:#f0f6e8; --surface:#ffffff; --line:#cbdcb6; --text:#21351f; --muted:#6f835f; --accent:#5c8f3b; --accent-2:#2f6b46; --green:#4f9f58; --yellow:#e8bd45; }
+body.theme-ceu { --bg:#eef7f6; --surface:#ffffff; --line:#cfe3df; --text:#18373a; --muted:#668187; --accent:#3d7f91; --accent-2:#216171; --green:#3c9b6d; --yellow:#f2bc42; background-image: radial-gradient(circle at 12% 18%, rgba(255,255,255,.9) 0 22px, transparent 24px), radial-gradient(circle at 18% 15%, rgba(255,255,255,.9) 0 16px, transparent 18px), radial-gradient(circle at 86% 20%, rgba(255,255,255,.75) 0 26px, transparent 28px); }
+body.theme-arcoiris { --bg:#fff7ec; --surface:#ffffff; --line:#f3d7b6; --text:#3c2440; --muted:#8a6670; --accent:#e35d5b; --accent-2:#8d5bd6; --green:#2f9e72; --yellow:#f5c542; background-image: linear-gradient(135deg, rgba(255,105,97,.18), rgba(255,211,91,.18), rgba(104,211,145,.18), rgba(110,168,254,.18)); }
+body.theme-galaxia { --bg:#10162f; --surface:#182145; --line:#33406b; --text:#f2f4ff; --muted:#aeb8df; --accent:#8f9bff; --accent-2:#5364d9; --green:#70d6a6; --yellow:#ffd66b; background-image: radial-gradient(circle at 20% 20%, rgba(255,255,255,.8) 0 2px, transparent 3px), radial-gradient(circle at 80% 30%, rgba(255,255,255,.7) 0 2px, transparent 3px), radial-gradient(circle at 40% 70%, rgba(255,214,107,.8) 0 3px, transparent 4px); }
+body.theme-jardim { --bg:#f0f6e8; --surface:#ffffff; --line:#cbdcb6; --text:#21351f; --muted:#6f835f; --accent:#5c8f3b; --accent-2:#2f6b46; --green:#4f9f58; --yellow:#e8bd45; background-image: radial-gradient(ellipse at 12% 92%, rgba(79,159,88,.35) 0 48px, transparent 50px), radial-gradient(ellipse at 45% 95%, rgba(92,143,59,.28) 0 64px, transparent 66px), radial-gradient(circle at 82% 14%, rgba(232,189,69,.45) 0 32px, transparent 34px); }
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); }
 button, input, textarea { font: inherit; }
 .app-shell { max-width: 1080px; margin: 0 auto; padding: 16px 16px 40px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.mom-clock-box { margin-left: auto; text-align: right; color: var(--accent); font-weight: 900; }
+.mom-clock { font-size: clamp(1.1rem, 4vw, 1.8rem); }
+.mom-date { color: var(--muted); font-size: .82rem; }
 h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 3rem); letter-spacing: 0; }
 p { margin: 0; }
 .muted, #syncStatus { color: var(--muted); font-weight: 800; line-height: 1.35; }
@@ -63,6 +66,9 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .weekday-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .weekday-btn { width: 44px; padding: 9px 0; background: #e5f1ef; color: var(--muted); border: 2px solid var(--line); }
 .weekday-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.emoji-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.emoji-choice { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; background: #f7fbfb; border: 2px solid var(--line); font-size: 1.35rem; }
+.emoji-choice.active { border-color: var(--accent); background: rgba(61,127,145,.12); }
 .task-item { display: grid; grid-template-columns: 42px 1fr auto; gap: 10px; align-items: center; padding: 10px; border: 2px solid var(--line); border-radius: 14px; margin-bottom: 8px; background: #f7fbfb; }
 .task-item.done { border-color: rgba(60,155,109,.45); background: rgba(60,155,109,.1); }
 .task-emoji { font-size: 1.6rem; text-align: center; }
