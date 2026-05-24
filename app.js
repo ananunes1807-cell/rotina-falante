@@ -28,7 +28,7 @@ function loadLocalState(){
   }
   return normalizeState({
     children: [
-      { id: crypto.randomUUID(), name: 'Criança', age: '', avatar: '⭐', routines: emptyRoutines(), done: {} }
+      { id: crypto.randomUUID(), name: 'Criança', birthDate: '', avatar: '⭐', routines: emptyRoutines(), done: {} }
     ],
     updatedAtLocal: new Date().toISOString()
   });
@@ -51,11 +51,13 @@ function emptyRoutines(){
 
 function normalizeState(state){
   state.children = Array.isArray(state.children) ? state.children : [];
-  if(!state.children.length) state.children.push({ id: crypto.randomUUID(), name:'Criança', age:'', avatar:'⭐', routines: emptyRoutines(), done:{} });
+  if(!state.children.length) state.children.push({ id: crypto.randomUUID(), name:'Criança', birthDate:'', avatar:'⭐', routines: emptyRoutines(), done:{} });
   state.children.forEach(child => {
     child.id ||= crypto.randomUUID();
     child.name ||= 'Criança';
-    child.age ??= '';
+    child.birthDate ||= '';
+    child.manualAge = child.manualAge ?? child.age ?? '';
+    delete child.age;
     child.avatar ||= '⭐';
     child.routines ||= emptyRoutines();
     child.done ||= {};
@@ -72,6 +74,24 @@ function todayKey(){
 function currentPeriod(){
   const h = new Date().getHours();
   return h < 12 ? 'manha' : h < 18 ? 'tarde' : 'noite';
+}
+
+function childAge(child){
+  if(!child.birthDate) return '';
+  const birth = new Date(`${child.birthDate}T00:00:00`);
+  if(Number.isNaN(birth.getTime())) return '';
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const hadBirthday = today.getMonth() > birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+  if(!hadBirthday) age--;
+  return age >= 0 ? age : '';
+}
+
+function ageText(child){
+  const age = childAge(child);
+  if(age !== '') return `${age} anos`;
+  if(child.manualAge !== '') return `${child.manualAge} anos até informar nascimento`;
+  return 'nascimento não informado';
 }
 
 function saveLocal(){
@@ -98,9 +118,13 @@ function setStatus(text, ok=false){
 }
 
 function parseFirebaseConfig(text){
-  const raw = text.trim();
+  let raw = text.trim();
   if(!raw) throw new Error('config');
   try { return JSON.parse(raw); } catch(e) {}
+  if(!raw.includes('{') && raw.includes('apiKey')){
+    raw = `{${raw.replace(/};?\s*$/, '')}}`;
+    return Function('"use strict";return (' + raw + ');')();
+  }
   const match = raw.match(/\{[\s\S]*\}/);
   if(!match) throw new Error('config');
   return Function('"use strict";return (' + match[0] + ');')();
@@ -170,12 +194,12 @@ function renderMom(){
         <div class="avatar">${child.avatar}</div>
         <div>
           <div class="task-name">${child.name}</div>
-          <div class="task-time">${child.age !== '' ? child.age + ' anos' : 'idade não informada'}</div>
+          <div class="task-time">${ageText(child)}</div>
         </div>
       </div>
       <div class="child-fields">
         <input value="${escapeAttr(child.name)}" data-child-name="${child.id}" placeholder="Nome">
-        <input value="${escapeAttr(child.age)}" data-child-age="${child.id}" type="number" min="0" max="18" placeholder="Idade">
+        <input value="${escapeAttr(child.birthDate)}" data-child-birth="${child.id}" type="date" title="Data de nascimento">
       </div>
       <div class="child-fields">
         <input value="${escapeAttr(child.avatar)}" data-child-avatar="${child.id}" maxlength="2" placeholder="⭐">
@@ -193,7 +217,7 @@ function renderMom(){
 
 function bindChildCards(){
   document.querySelectorAll('[data-child-name]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childName, { name: el.value || 'Criança' })));
-  document.querySelectorAll('[data-child-age]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childAge, { age: el.value })));
+  document.querySelectorAll('[data-child-birth]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childBirth, { birthDate: el.value })));
   document.querySelectorAll('[data-child-avatar]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childAvatar, { avatar: el.value || '⭐' })));
   document.querySelectorAll('[data-edit]').forEach(el => el.addEventListener('click', () => openEditor(el.dataset.edit)));
   document.querySelectorAll('[data-remove]').forEach(el => el.addEventListener('click', () => removeChild(el.dataset.remove)));
@@ -226,7 +250,7 @@ function openEditor(id){
 function renderEditor(){
   const child = childById(editingChildId);
   $('editorTitle').textContent = `${child.avatar} Rotina de ${child.name}`;
-  $('editorSubtitle').textContent = child.age !== '' ? `${child.age} anos` : 'Sem idade cadastrada';
+  $('editorSubtitle').textContent = ageText(child);
   $('periodTabs').innerHTML = periods.map(p => `<button class="${p.id===editingPeriod?'active':''}" data-period="${p.id}">${p.emoji} ${p.label}</button>`).join('');
   document.querySelectorAll('[data-period]').forEach(btn => btn.addEventListener('click', () => { editingPeriod = btn.dataset.period; renderEditor(); }));
   const tasks = child.routines[editingPeriod] || [];
@@ -281,7 +305,8 @@ function renderChild(){
   const child = childById(selectedChildId);
   $('childPicker').innerHTML = appState.children.map(c => `<button class="${c.id===selectedChildId?'active':''}" data-pick-child="${c.id}">${c.avatar} ${c.name}</button>`).join('');
   document.querySelectorAll('[data-pick-child]').forEach(btn => btn.addEventListener('click', () => { selectedChildId = btn.dataset.pickChild; renderChild(); }));
-  $('childName').textContent = `${child.avatar} ${child.name}${child.age !== '' ? ' · ' + child.age + ' anos' : ''}`;
+  const age = childAge(child);
+  $('childName').textContent = `${child.avatar} ${child.name}${age !== '' ? ' · ' + age + ' anos' : ''}`;
   const period = currentPeriod();
   $('childPeriod').textContent = `Rotina da ${periods.find(p => p.id === period).label.toLowerCase()}`;
   const next = nextTask(child, period);
@@ -363,7 +388,7 @@ function escapeAttr(value){
 }
 
 function addChild(){
-  const child = { id: crypto.randomUUID(), name: `Filho ${appState.children.length + 1}`, age: '', avatar: '⭐', routines: emptyRoutines(), done: {} };
+  const child = { id: crypto.randomUUID(), name: `Filho ${appState.children.length + 1}`, birthDate: '', avatar: '⭐', routines: emptyRoutines(), done: {} };
   appState.children.push(child);
   editingChildId = child.id;
   selectedChildId = child.id;
