@@ -35,6 +35,7 @@ let saveTimer = null;
 let applyingRemote = false;
 let mode = localStorage.getItem('rf_mode') || 'mom';
 let selectedChildId = localStorage.getItem('rf_selectedChild') || '';
+let selectedProfileTab = localStorage.getItem('rf_profileTab') || 'children';
 let editingChildId = '';
 let editingPeriod = 'manha';
 let selectedTaskDays = new Set([0,1,2,3,4,5,6]);
@@ -245,8 +246,17 @@ function renderMode(){
 }
 
 function renderMom(){
-  $('childrenGrid').innerHTML = appState.children.map(child => `
-    <div class="child-card">
+  document.querySelectorAll('[data-profile-tab]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.profileTab === selectedProfileTab);
+    btn.onclick = () => {
+      selectedProfileTab = btn.dataset.profileTab;
+      localStorage.setItem('rf_profileTab', selectedProfileTab);
+      renderMom();
+    };
+  });
+  const visibleProfiles = appState.children.filter(child => selectedProfileTab === 'mom' ? child.type === 'mom' : child.type !== 'mom');
+  $('childrenGrid').innerHTML = visibleProfiles.map(child => `
+    <div class="child-card profile-card-${child.type}">
       <div class="child-card-head">
         <div class="avatar">${child.avatar}</div>
         <div>
@@ -332,6 +342,10 @@ function renderEditor(){
   const tasks = child.routines[editingPeriod] || [];
   $('taskList').innerHTML = tasks.length ? tasks.map(task => taskHtml(task, child)).join('') : '<p class="muted">Sem tarefas neste período.</p>';
   document.querySelectorAll('[data-delete-task]').forEach(btn => btn.addEventListener('click', () => deleteTask(btn.dataset.deleteTask)));
+  document.querySelectorAll('[data-move-task]').forEach(btn => btn.addEventListener('click', () => {
+    const [taskId, dir] = btn.dataset.moveTask.split(':');
+    moveTask(taskId, Number(dir));
+  }));
 }
 
 function renderEmojiPicker(){
@@ -349,14 +363,20 @@ function renderEmojiPicker(){
 function taskHtml(task, child){
   const done = isDone(child, task.id);
   const dayLabel = (task.days || []).length === 7 ? 'Todos os dias' : (task.days || []).map(d => weekDays[d]).join(', ');
+  const tasks = child.routines[editingPeriod] || [];
+  const index = tasks.findIndex(item => item.id === task.id);
   return `
-    <div class="task-item ${done?'done':''}">
+    <div class="task-item agenda-block ${done?'done':''}">
       <div class="task-emoji">${task.emoji || '✅'}</div>
       <div>
         <div class="task-name">${task.name}</div>
         <div class="task-time">${task.time || 'Sem horário'} · ${dayLabel}</div>
       </div>
-      <button class="secondary" data-delete-task="${task.id}">Excluir</button>
+      <div class="task-actions">
+        <button class="secondary" data-move-task="${task.id}:-1" ${index===0?'disabled':''}>↑</button>
+        <button class="secondary" data-move-task="${task.id}:1" ${index===tasks.length-1?'disabled':''}>↓</button>
+        <button class="secondary" data-delete-task="${task.id}">Excluir</button>
+      </div>
     </div>
   `;
 }
@@ -395,6 +415,18 @@ function addTask(){
 function deleteTask(taskId){
   const child = childById(editingChildId);
   child.routines[editingPeriod] = child.routines[editingPeriod].filter(t => t.id !== taskId);
+  scheduleSave();
+  renderEditor();
+  renderChild();
+}
+
+function moveTask(taskId, dir){
+  const child = childById(editingChildId);
+  const tasks = child.routines[editingPeriod];
+  const index = tasks.findIndex(task => task.id === taskId);
+  const nextIndex = index + dir;
+  if(index < 0 || nextIndex < 0 || nextIndex >= tasks.length) return;
+  [tasks[index], tasks[nextIndex]] = [tasks[nextIndex], tasks[index]];
   scheduleSave();
   renderEditor();
   renderChild();
