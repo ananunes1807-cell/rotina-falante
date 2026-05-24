@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -114,6 +114,10 @@ function normalizeState(state){
 
 function todayKey(){
   const d = new Date();
+  return dateKey(d);
+}
+
+function dateKey(d){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
@@ -550,6 +554,7 @@ function renderChild(){
   const next = nextTask(child, period);
   const waiting = next ? null : nextUpcomingTask(child);
   renderDailyBadge(child);
+  renderStreakBadge(child);
   if($('mascotCard')) $('mascotCard').innerHTML = `
     <div class="mascot-emoji">${next ? mascot.emoji : '😴'}</div>
     <div>
@@ -594,6 +599,21 @@ function renderDailyBadge(child){
   const complete = total > 0 && doneCount === total;
   $('dailyBadge').textContent = complete ? '🏅 Dia completo' : `⭐ ${doneCount}/${total} missões hoje`;
   $('dailyBadge').classList.toggle('complete', complete);
+}
+
+function renderStreakBadge(child){
+  if(!$('streakBadge')) return;
+  let streak = 0;
+  const d = new Date();
+  for(let i = 0; i < 30; i++){
+    const key = dateKey(d);
+    const done = child.done?.[key] && Object.values(child.done[key]).some(Boolean);
+    if(!done) break;
+    streak++;
+    d.setDate(d.getDate() - 1);
+  }
+  $('streakBadge').textContent = streak ? `🔥 ${streak} dia${streak > 1 ? 's' : ''} seguido${streak > 1 ? 's' : ''}` : '🌱 Começando hoje';
+  $('streakBadge').classList.toggle('active', streak > 0);
 }
 
 function childTaskHtml(task, child){
@@ -912,6 +932,7 @@ document.addEventListener('click', (event) => {
   if(target.id === 'doneBtn') return run(markDone);
   if(target.id === 'repeatBtn') return run(speakCurrentMission);
   if(target.id === 'speakTodayBtn') return run(speakTodayTasks);
+  if(target.id === 'stopSpeechBtn') return run(stopSpeaking);
   if(target.id === 'helpBtn') return run(askForHelp);
   if(target.id === 'speakTimeBtn' || target.id === 'speakTimeBigBtn' || target.id === 'childSpeakTimeBtn') return run(speakTime);
   if(target.dataset.speakTask) return run(() => speakTask(childById(selectedChildId), target.dataset.speakTask));
