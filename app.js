@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -25,6 +25,14 @@ const profileThemes = [
   { id:'princesa', label:'Jardim mágico', emoji:'🌸', bg:'linear-gradient(135deg,#ffe1f1,#ffc6df)' },
   { id:'espaco', label:'Espaço estelar', emoji:'🚀', bg:'linear-gradient(135deg,#202955,#6877ff)' },
   { id:'mae', label:'Cantinho da mãe', emoji:'☕', bg:'linear-gradient(135deg,#f2e8ff,#d8c7ff)' },
+];
+const soundOptions = [
+  { id:'suave', label:'Sininho suave', emoji:'🔔' },
+  { id:'estrelas', label:'Estrelinhas', emoji:'✨' },
+  { id:'agua', label:'Água calma', emoji:'💧' },
+  { id:'tambor', label:'Tamborzinho leve', emoji:'🥁' },
+  { id:'voz', label:'Só voz', emoji:'🗣️' },
+  { id:'mudo', label:'Sem som', emoji:'🔇' }
 ];
 const mascots = {
   bichinhos: { emoji:'🧸', name:'Amigo Fofo', wait:'Estou aqui esperando a próxima missão.' },
@@ -164,6 +172,7 @@ function normalizeState(state){
     delete child.age;
     child.avatar ||= '⭐';
     child.profileTheme ||= child.type === 'mom' ? 'mae' : 'bichinhos';
+    child.alarmSound ||= 'suave';
     child.stars = Number(child.stars || 0);
     child.routines ||= emptyRoutines();
     child.done ||= {};
@@ -484,6 +493,15 @@ function profileDetailHtml(child){
     <div class="profile-theme-row">
       ${profileThemes.map(theme => `<button class="profile-theme-chip ${child.profileTheme===theme.id?'active':''}" data-profile-theme="${child.id}:${theme.id}">${theme.emoji} ${theme.label}</button>`).join('')}
     </div>
+    <div class="sound-row">
+      <label>
+        Som do alarme
+        <select data-profile-sound="${child.id}">
+          ${soundOptions.map(sound => `<option value="${sound.id}" ${child.alarmSound===sound.id?'selected':''}>${sound.emoji} ${sound.label}</option>`).join('')}
+        </select>
+      </label>
+      <button class="secondary" data-test-sound="${child.id}">Testar som</button>
+    </div>
     <div class="child-card-actions">
       <button class="secondary" data-speak="${child.id}">Falar rotina</button>
       ${child.type === 'mom' ? '' : `<button class="secondary" data-remove="${child.id}">Remover perfil</button>`}
@@ -530,6 +548,8 @@ function bindChildCards(){
     updateChild(id, { profileTheme });
     renderMom();
   }));
+  document.querySelectorAll('[data-profile-sound]').forEach(el => el.addEventListener('change', () => updateChild(el.dataset.profileSound, { alarmSound: el.value })));
+  document.querySelectorAll('[data-test-sound]').forEach(el => el.addEventListener('click', () => playAlarmSound(childById(el.dataset.testSound))));
   document.querySelectorAll('[data-profile-type]').forEach(el => el.addEventListener('change', () => {
     updateChild(el.dataset.profileType, { type: el.checked ? 'mom' : 'child', profileTheme: el.checked ? 'mae' : 'bichinhos' });
     renderMom();
@@ -939,7 +959,7 @@ function markDone(){
   if(persistentAlarm && persistentAlarm.task.id === taskId) persistentAlarm = null;
   scheduleSave();
   showCelebration(child, task);
-  gentleAlarmSpeak(`Muito bem, ${child.name}! Missão concluída. Você ganhou uma estrela.`);
+  gentleAlarmSpeak(`Muito bem, ${child.name}! Missão concluída. Você ganhou uma estrela.`, child);
   renderChild();
 }
 
@@ -987,7 +1007,7 @@ function speakCurrentMission(){
 
 function askForHelp(){
   const child = childById(selectedChildId);
-  gentleAlarmSpeak(`${child.name} precisa de ajuda com a rotina.`);
+  gentleAlarmSpeak(`${child.name} precisa de ajuda com a rotina.`, child);
 }
 
 function dateSpeech(){
@@ -1013,37 +1033,50 @@ function stopSpeaking(){
   if('speechSynthesis' in window) speechSynthesis.cancel();
 }
 
-function playSoftChime(){
+function playToneSequence(notes, duration=.55, volume=.045, wave='sine'){
   try{
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if(!Ctx) return;
     audioContext ||= new Ctx();
     if(audioContext.state === 'suspended') audioContext.resume();
     const now = audioContext.currentTime;
-    const notes = [523.25, 659.25, 783.99];
     notes.forEach((freq, index) => {
       const osc = audioContext.createOscillator();
       const gain = audioContext.createGain();
-      osc.type = 'sine';
+      osc.type = wave;
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0.0001, now + index * 0.18);
-      gain.gain.exponentialRampToValueAtTime(0.045, now + index * 0.18 + 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.18 + 0.55);
+      gain.gain.exponentialRampToValueAtTime(volume, now + index * 0.18 + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.18 + duration);
       osc.connect(gain);
       gain.connect(audioContext.destination);
       osc.start(now + index * 0.18);
-      osc.stop(now + index * 0.18 + 0.6);
+      osc.stop(now + index * 0.18 + duration + 0.05);
     });
   }catch(e){}
 }
 
-function gentleAlarmSpeak(text){
+function playAlarmSound(child){
+  const sound = child?.alarmSound || 'suave';
+  if(sound === 'mudo' || sound === 'voz') return;
+  const presets = {
+    suave: { notes:[523.25, 659.25, 783.99], duration:.55, volume:.045, wave:'sine' },
+    estrelas: { notes:[880, 1174.66, 1046.5, 1318.51], duration:.34, volume:.035, wave:'sine' },
+    agua: { notes:[392, 493.88, 587.33], duration:.75, volume:.032, wave:'triangle' },
+    tambor: { notes:[180, 150, 210], duration:.16, volume:.055, wave:'sine' }
+  };
+  const preset = presets[sound] || presets.suave;
+  playToneSequence(preset.notes, preset.duration, preset.volume, preset.wave);
+}
+
+function gentleAlarmSpeak(text, child=null){
   stopSpeaking();
-  playSoftChime();
+  if(child?.alarmSound === 'mudo') return;
+  playAlarmSound(child);
   pendingSpeechTimer = setTimeout(() => {
     pendingSpeechTimer = null;
     speak(text);
-  }, 900);
+  }, child?.alarmSound === 'voz' || child?.alarmSound === 'mudo' ? 120 : 900);
 }
 
 function speakTime(){
@@ -1086,7 +1119,7 @@ function checkTaskAlarms(){
     const now = Date.now();
     if(!persistentAlarm.lastReminderAt || now - persistentAlarm.lastReminderAt > 90000){
       persistentAlarm.lastReminderAt = now;
-      gentleAlarmSpeak(`${persistentAlarm.child.name}, lembrete calminho. Ainda está na hora de ${persistentAlarm.task.name}. Quando terminar, toque no botão Já fiz.`);
+      gentleAlarmSpeak(`${persistentAlarm.child.name}, lembrete calminho. Ainda está na hora de ${persistentAlarm.task.name}. Quando terminar, toque no botão Já fiz.`, persistentAlarm.child);
     }
     return;
   }
@@ -1109,7 +1142,7 @@ function checkTaskAlarms(){
           localStorage.setItem('rf_mode', mode);
           renderAll();
         }
-        gentleAlarmSpeak(`${dateSpeech()} ${child.name}, chegou a hora com calma. Sua rotina de agora é ${period.label}. Agora é hora de ${task.name}.`);
+        gentleAlarmSpeak(`${dateSpeech()} ${child.name}, chegou a hora com calma. Sua rotina de agora é ${period.label}. Agora é hora de ${task.name}.`, child);
       });
     });
   });

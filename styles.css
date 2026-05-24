@@ -107,6 +107,8 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .child-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(138px, .45fr); gap: 8px; margin-top: 12px; }
 .child-card-actions { display: flex; gap: 8px; margin-top: 10px; }
 .profile-theme-row, .profile-avatar-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.sound-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-top: 10px; }
+.sound-row label { margin: 0; }
 .avatar-choice { width: 48px; height: 48px; padding: 0; display: grid; place-items: center; border: 2px solid var(--line); background: #f7fbfb; font-size: 1.55rem; }
 .avatar-choice.active { border-color: var(--accent); background: rgba(61,127,145,.12); }
 .profile-theme-chip { padding: 8px 10px; border: 2px solid var(--line); background: #f7fbfb; color: var(--text); font-size: .82rem; }
@@ -192,6 +194,7 @@ body.child-theme-active .primary, body.child-theme-active .secondary { border-ra
   .agenda-row { grid-template-columns: 70px minmax(0, 1fr); }
   .agenda-row button { width: 100%; }
   .task-form { grid-template-columns: 62px 1fr; }
+  .sound-row { grid-template-columns: 1fr; }
   .profile-detail-grid { grid-template-columns: 1fr; }
   .task-form button, .task-form input[type=time] { grid-column: span 1; }
   .toolbar { align-items: stretch; }
