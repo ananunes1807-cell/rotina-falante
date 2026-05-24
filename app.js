@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -54,6 +54,7 @@ let persistentAlarm = null;
 let timeAnnounceInterval = Number(localStorage.getItem('rf_timeAnnounceInterval') || 0);
 let timeAnnounceTimer = null;
 let audioContext = null;
+let pendingSpeechTimer = null;
 
 function loadLocalState(){
   const saved = localStorage.getItem('rf_state');
@@ -623,7 +624,7 @@ function speakTodayTasks(){
   const tasks = periods.flatMap(period => tasksForToday(child, period.id).map(task => ({ ...task, period: period.label })));
   if(!tasks.length) return speak(`${child.name}, não tem tarefas marcadas para hoje.`);
   const text = tasks.map(task => `${task.period}: ${task.name}${task.time ? ' às ' + task.time : ''}`).join('. ');
-  speak(`${dateSpeech()} ${child.name}, suas tarefas de hoje são: ${text}.`);
+  speak(`${child.name}, suas tarefas de hoje são: ${text}.`);
 }
 
 function countdownText(targetMin){
@@ -716,6 +717,20 @@ function speakChild(child){
   speak(`${dateSpeech()} ${child.name}, sua rotina de agora é ${periods.find(p => p.id === period).label}. Você tem que fazer: ${task.name}.${steps} ${task.time ? 'Horário: ' + task.time + '.' : ''}`);
 }
 
+function speakCurrentMission(){
+  const child = childById(selectedChildId);
+  const period = currentPeriod();
+  const task = nextTask(child, period);
+  const periodLabel = periods.find(p => p.id === period)?.label || 'agora';
+  if(!task){
+    const waiting = nextUpcomingTask(child);
+    if(waiting) return speak(`${child.name}, a rotina de ${periodLabel} está completa. Modo espera. Próxima tarefa: ${waiting.task.name}${waiting.task.time ? ' às ' + waiting.task.time : ''}.`);
+    return speak(`${child.name}, todas as tarefas de hoje foram feitas. Muito bem!`);
+  }
+  const steps = Array.isArray(task.steps) && task.steps.length ? ` Passinhos: ${task.steps.join(', ')}.` : '';
+  speak(`${child.name}, missão de agora: ${task.name}.${task.time ? ' Horário: ' + task.time + '.' : ''}${steps}`);
+}
+
 function askForHelp(){
   const child = childById(selectedChildId);
   gentleAlarmSpeak(`${child.name} precisa de ajuda com a rotina.`);
@@ -728,12 +743,20 @@ function dateSpeech(){
 
 function speak(text){
   if(!('speechSynthesis' in window)) return;
-  speechSynthesis.cancel();
+  stopSpeaking();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'pt-BR';
   u.rate = .84;
   u.pitch = 1.08;
   speechSynthesis.speak(u);
+}
+
+function stopSpeaking(){
+  if(pendingSpeechTimer){
+    clearTimeout(pendingSpeechTimer);
+    pendingSpeechTimer = null;
+  }
+  if('speechSynthesis' in window) speechSynthesis.cancel();
 }
 
 function playSoftChime(){
@@ -761,8 +784,12 @@ function playSoftChime(){
 }
 
 function gentleAlarmSpeak(text){
+  stopSpeaking();
   playSoftChime();
-  setTimeout(() => speak(text), 900);
+  pendingSpeechTimer = setTimeout(() => {
+    pendingSpeechTimer = null;
+    speak(text);
+  }, 900);
 }
 
 function speakTime(){
@@ -876,13 +903,18 @@ if($('timeAnnounceInterval')) $('timeAnnounceInterval').addEventListener('change
 document.addEventListener('click', (event) => {
   const target = event.target.closest('button');
   if(!target) return;
-  if(target.dataset.mode) return switchMode(target.dataset.mode);
-  if(target.id === 'doneBtn') return markDone();
-  if(target.id === 'repeatBtn') return speakChild(childById(selectedChildId));
-  if(target.id === 'speakTodayBtn') return speakTodayTasks();
-  if(target.id === 'helpBtn') return askForHelp();
-  if(target.id === 'speakTimeBtn' || target.id === 'speakTimeBigBtn' || target.id === 'childSpeakTimeBtn') return speakTime();
-  if(target.dataset.speakTask) return speakTask(childById(selectedChildId), target.dataset.speakTask);
+  const run = (action) => {
+    event.preventDefault();
+    event.stopPropagation();
+    action();
+  };
+  if(target.dataset.mode) return run(() => switchMode(target.dataset.mode));
+  if(target.id === 'doneBtn') return run(markDone);
+  if(target.id === 'repeatBtn') return run(speakCurrentMission);
+  if(target.id === 'speakTodayBtn') return run(speakTodayTasks);
+  if(target.id === 'helpBtn') return run(askForHelp);
+  if(target.id === 'speakTimeBtn' || target.id === 'speakTimeBigBtn' || target.id === 'childSpeakTimeBtn') return run(speakTime);
+  if(target.dataset.speakTask) return run(() => speakTask(childById(selectedChildId), target.dataset.speakTask));
 });
 function switchMode(nextMode){
   if(mode === 'child' && nextMode === 'mom'){
