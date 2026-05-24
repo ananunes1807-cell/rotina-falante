@@ -11,6 +11,7 @@ const weekDays = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const longWeekDays = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
 const months = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 const taskEmojis = ['✅','🦷','🚿','👕','🍽️','🍎','💊','📚','🎒','🧹','🛁','🎮','📖','😴','☕','🚗','🧘','⭐'];
+const profileEmojis = ['☕','🌸','💜','📚','🧘','⭐','🌈','🦋','🚀','🦕','🎮','🎨','⚽','🎵','🍓','💎'];
 const themes = [
   { id:'ceu', label:'Céu', emoji:'💙' },
   { id:'arcoiris', label:'Arco-íris', emoji:'🌈' },
@@ -213,6 +214,15 @@ function childProfiles(){
   return appState.children.filter(child => child.type !== 'mom');
 }
 
+function momProfile(){
+  let profile = appState.children.find(child => child.type === 'mom');
+  if(!profile){
+    profile = { id: crypto.randomUUID(), type:'mom', name:'Mãe', birthDate:'', avatar:'☕', profileTheme:'mae', routines: emptyRoutines(), done:{} };
+    appState.children.push(profile);
+  }
+  return profile;
+}
+
 function profileThemeById(id){
   return profileThemes.find(theme => theme.id === id) || profileThemes[0];
 }
@@ -249,6 +259,10 @@ function renderMode(){
 }
 
 function renderMom(){
+  const inMomTab = selectedProfileTab === 'mom';
+  $('profilesTitle').textContent = inMomTab ? 'Minha rotina' : 'Filhos e rotinas';
+  $('profilesHint').textContent = inMomTab ? 'Edite seu nome, seu emoji e sua rotina separada.' : 'Edite aqui. Os aparelhos das crianças atualizam automaticamente.';
+  $('addChildBtn').hidden = inMomTab;
   document.querySelectorAll('[data-profile-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.profileTab === selectedProfileTab);
     btn.onclick = () => {
@@ -257,7 +271,8 @@ function renderMom(){
       renderMom();
     };
   });
-  const visibleProfiles = appState.children.filter(child => selectedProfileTab === 'mom' ? child.type === 'mom' : child.type !== 'mom');
+  const visibleProfiles = inMomTab ? [momProfile()] : childProfiles();
+  if(inMomTab) editingChildId = visibleProfiles[0].id;
   $('childrenGrid').innerHTML = visibleProfiles.map(child => `
     <button class="profile-tile ${editingChildId===child.id?'active':''} profile-card-${child.type}" style="--tile-profile-bg:${profileThemeById(child.profileTheme).bg}" data-open-profile="${child.id}">
       <div class="profile-tile-avatar">${child.avatar}</div>
@@ -265,7 +280,7 @@ function renderMom(){
       <div class="profile-tile-meta">${child.type === 'mom' ? 'Rotina da mãe' : ageText(child)}</div>
     </button>
   `).join('');
-  if(editingChildId && !visibleProfiles.some(child => child.id === editingChildId)) editingChildId = '';
+  if(!inMomTab && editingChildId && !visibleProfiles.some(child => child.id === editingChildId)) editingChildId = '';
   bindChildCards();
   if(editingChildId) renderEditor();
   else $('routineEditor').hidden = true;
@@ -290,20 +305,19 @@ function profileDetailHtml(child){
         <input value="${escapeAttr(child.birthDate)}" data-child-birth="${child.id}" type="date">
       </label>
       <label>
-        Emoji grande
+        Emoji do perfil
         <input value="${escapeAttr(child.avatar)}" data-child-avatar="${child.id}" maxlength="2" placeholder="⭐">
       </label>
+    </div>
+    <div class="profile-avatar-picker">
+      ${profileEmojis.map(emoji => `<button class="avatar-choice ${child.avatar===emoji?'active':''}" data-profile-avatar="${child.id}:${emoji}">${emoji}</button>`).join('')}
     </div>
     <div class="profile-theme-row">
       ${profileThemes.map(theme => `<button class="profile-theme-chip ${child.profileTheme===theme.id?'active':''}" data-profile-theme="${child.id}:${theme.id}">${theme.emoji} ${theme.label}</button>`).join('')}
     </div>
-    <label class="type-toggle">
-      <input type="checkbox" ${child.type === 'mom' ? 'checked' : ''} data-profile-type="${child.id}">
-      Essa é rotina da mãe
-    </label>
     <div class="child-card-actions">
       <button class="secondary" data-speak="${child.id}">Falar rotina</button>
-      <button class="secondary" data-remove="${child.id}">Remover perfil</button>
+      ${child.type === 'mom' ? '' : `<button class="secondary" data-remove="${child.id}">Remover perfil</button>`}
     </div>
   `;
 }
@@ -334,9 +348,14 @@ function renderProfileCalendar(child){
 
 function bindChildCards(){
   document.querySelectorAll('[data-open-profile]').forEach(el => el.addEventListener('click', () => openEditor(el.dataset.openProfile)));
-  document.querySelectorAll('[data-child-name]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childName, { name: el.value || 'Criança' })));
+  document.querySelectorAll('[data-child-name]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childName, { name: el.value })));
   document.querySelectorAll('[data-child-birth]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childBirth, { birthDate: el.value })));
   document.querySelectorAll('[data-child-avatar]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childAvatar, { avatar: el.value || '⭐' })));
+  document.querySelectorAll('[data-profile-avatar]').forEach(el => el.addEventListener('click', () => {
+    const [id, avatar] = el.dataset.profileAvatar.split(':');
+    updateChild(id, { avatar });
+    renderMom();
+  }));
   document.querySelectorAll('[data-profile-theme]').forEach(el => el.addEventListener('click', () => {
     const [id, profileTheme] = el.dataset.profileTheme.split(':');
     updateChild(id, { profileTheme });
@@ -353,6 +372,7 @@ function bindChildCards(){
 
 function updateChild(id, patch){
   const child = childById(id);
+  if(patch.name !== undefined && !patch.name) patch.name = child.type === 'mom' ? 'Mãe' : 'Criança';
   Object.assign(child, patch);
   scheduleSave();
   renderChild();
@@ -675,6 +695,13 @@ function escapeAttr(value){
 }
 
 function addChild(){
+  if(selectedProfileTab === 'mom'){
+    const profile = momProfile();
+    editingChildId = profile.id;
+    renderMom();
+    openEditor(profile.id);
+    return;
+  }
   const child = { id: crypto.randomUUID(), type:'child', name: `Filho ${childProfiles().length + 1}`, birthDate: '', avatar: '⭐', profileTheme:'bichinhos', routines: emptyRoutines(), done: {} };
   appState.children.push(child);
   editingChildId = child.id;
