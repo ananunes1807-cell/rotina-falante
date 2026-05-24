@@ -16,6 +16,13 @@ const themes = [
   { id:'galaxia', label:'Galáxia', emoji:'🚀' },
   { id:'jardim', label:'Jardim', emoji:'🌿' },
 ];
+const profileThemes = [
+  { id:'bichinhos', label:'Bichinhos', emoji:'🐾', bg:'linear-gradient(135deg,#d7f8dc,#b4e4ff)' },
+  { id:'dinossauro', label:'Dino', emoji:'🦕', bg:'linear-gradient(135deg,#d8f5c8,#7ed957)' },
+  { id:'princesa', label:'Princesa', emoji:'🌸', bg:'linear-gradient(135deg,#ffe1f1,#ffc6df)' },
+  { id:'espaco', label:'Espaço', emoji:'🚀', bg:'linear-gradient(135deg,#202955,#6877ff)' },
+  { id:'mae', label:'Mãe', emoji:'☕', bg:'linear-gradient(135deg,#f2e8ff,#d8c7ff)' },
+];
 const defaultConfigText = localStorage.getItem('rf_firebaseConfig') || '';
 let familyCode = localStorage.getItem('rf_familyCode') || '';
 let momPin = localStorage.getItem('rf_momPin') || '1234';
@@ -40,7 +47,8 @@ function loadLocalState(){
   return normalizeState({
     theme: 'ceu',
     children: [
-      { id: crypto.randomUUID(), name: 'Criança', birthDate: '', avatar: '⭐', routines: emptyRoutines(), done: {} }
+      { id: crypto.randomUUID(), type:'child', name: 'Criança', birthDate: '', avatar: '⭐', profileTheme:'bichinhos', routines: emptyRoutines(), done: {} },
+      { id: crypto.randomUUID(), type:'mom', name: 'Mãe', birthDate: '', avatar: '☕', profileTheme:'mae', routines: emptyRoutines(), done: {} }
     ],
     updatedAtLocal: new Date().toISOString()
   });
@@ -64,14 +72,17 @@ function emptyRoutines(){
 function normalizeState(state){
   state.theme ||= 'ceu';
   state.children = Array.isArray(state.children) ? state.children : [];
-  if(!state.children.length) state.children.push({ id: crypto.randomUUID(), name:'Criança', birthDate:'', avatar:'⭐', routines: emptyRoutines(), done:{} });
+  if(!state.children.length) state.children.push({ id: crypto.randomUUID(), type:'child', name:'Criança', birthDate:'', avatar:'⭐', profileTheme:'bichinhos', routines: emptyRoutines(), done:{} });
+  if(!state.children.some(child => child.type === 'mom')) state.children.push({ id: crypto.randomUUID(), type:'mom', name:'Mãe', birthDate:'', avatar:'☕', profileTheme:'mae', routines: emptyRoutines(), done:{} });
   state.children.forEach(child => {
     child.id ||= crypto.randomUUID();
     child.name ||= 'Criança';
+    child.type ||= child.name.toLowerCase().includes('mãe') || child.name.toLowerCase().includes('mae') ? 'mom' : 'child';
     child.birthDate ||= '';
     child.manualAge = child.manualAge ?? child.age ?? '';
     delete child.age;
     child.avatar ||= '⭐';
+    child.profileTheme ||= child.type === 'mom' ? 'mae' : 'bichinhos';
     child.stars = Number(child.stars || 0);
     child.routines ||= emptyRoutines();
     child.done ||= {};
@@ -192,6 +203,14 @@ function childById(id){
   return appState.children.find(c => c.id === id) || appState.children[0];
 }
 
+function childProfiles(){
+  return appState.children.filter(child => child.type !== 'mom');
+}
+
+function profileThemeById(id){
+  return profileThemes.find(theme => theme.id === id) || profileThemes[0];
+}
+
 function renderAll(){
   applyTheme(appState.theme);
   renderMode();
@@ -229,7 +248,7 @@ function renderMom(){
         <div class="avatar">${child.avatar}</div>
         <div>
           <div class="task-name">${child.name}</div>
-          <div class="task-time">${ageText(child)} · ⭐ ${child.stars || 0}</div>
+          <div class="task-time">${child.type === 'mom' ? 'Rotina da mãe' : ageText(child)} · ⭐ ${child.stars || 0}</div>
         </div>
       </div>
       <div class="child-fields">
@@ -240,6 +259,13 @@ function renderMom(){
         <input value="${escapeAttr(child.avatar)}" data-child-avatar="${child.id}" maxlength="2" placeholder="⭐">
         <button class="secondary" data-edit="${child.id}">Rotina</button>
       </div>
+      <div class="profile-theme-row">
+        ${profileThemes.map(theme => `<button class="profile-theme-chip ${child.profileTheme===theme.id?'active':''}" data-profile-theme="${child.id}:${theme.id}">${theme.emoji} ${theme.label}</button>`).join('')}
+      </div>
+      <label class="type-toggle">
+        <input type="checkbox" ${child.type === 'mom' ? 'checked' : ''} data-profile-type="${child.id}">
+        Rotina da mãe
+      </label>
       <div class="child-card-actions">
         <button class="secondary" data-speak="${child.id}">Falar</button>
         <button class="secondary" data-remove="${child.id}">Remover</button>
@@ -254,6 +280,15 @@ function bindChildCards(){
   document.querySelectorAll('[data-child-name]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childName, { name: el.value || 'Criança' })));
   document.querySelectorAll('[data-child-birth]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childBirth, { birthDate: el.value })));
   document.querySelectorAll('[data-child-avatar]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childAvatar, { avatar: el.value || '⭐' })));
+  document.querySelectorAll('[data-profile-theme]').forEach(el => el.addEventListener('click', () => {
+    const [id, profileTheme] = el.dataset.profileTheme.split(':');
+    updateChild(id, { profileTheme });
+    renderMom();
+  }));
+  document.querySelectorAll('[data-profile-type]').forEach(el => el.addEventListener('change', () => {
+    updateChild(el.dataset.profileType, { type: el.checked ? 'mom' : 'child', profileTheme: el.checked ? 'mae' : 'bichinhos' });
+    renderMom();
+  }));
   document.querySelectorAll('[data-edit]').forEach(el => el.addEventListener('click', () => openEditor(el.dataset.edit)));
   document.querySelectorAll('[data-remove]').forEach(el => el.addEventListener('click', () => removeChild(el.dataset.remove)));
   document.querySelectorAll('[data-speak]').forEach(el => el.addEventListener('click', () => speakChild(childById(el.dataset.speak))));
@@ -268,8 +303,9 @@ function updateChild(id, patch){
 
 function removeChild(id){
   if(appState.children.length <= 1) return;
+  if(childById(id).type === 'mom' && appState.children.filter(child => child.type === 'mom').length <= 1) return;
   appState.children = appState.children.filter(c => c.id !== id);
-  if(selectedChildId === id) selectedChildId = appState.children[0].id;
+  if(selectedChildId === id) selectedChildId = childProfiles()[0]?.id || appState.children[0].id;
   if(editingChildId === id) editingChildId = '';
   scheduleSave();
   renderAll();
@@ -348,10 +384,13 @@ function deleteTask(taskId){
 }
 
 function renderChild(){
-  if(!selectedChildId || !childById(selectedChildId)) selectedChildId = appState.children[0].id;
+  const visibleChildren = childProfiles();
+  if(!selectedChildId || !visibleChildren.some(child => child.id === selectedChildId)) selectedChildId = visibleChildren[0]?.id || appState.children[0].id;
   localStorage.setItem('rf_selectedChild', selectedChildId);
   const child = childById(selectedChildId);
-  $('childPicker').innerHTML = appState.children.map(c => `<button class="${c.id===selectedChildId?'active':''}" data-pick-child="${c.id}">${c.avatar} ${c.name}</button>`).join('');
+  const visual = profileThemeById(child.profileTheme);
+  document.documentElement.style.setProperty('--child-profile-bg', visual.bg);
+  $('childPicker').innerHTML = visibleChildren.map(c => `<button class="${c.id===selectedChildId?'active':''}" data-pick-child="${c.id}">${c.avatar} ${c.name}</button>`).join('');
   document.querySelectorAll('[data-pick-child]').forEach(btn => btn.addEventListener('click', () => { selectedChildId = btn.dataset.pickChild; renderChild(); }));
   const age = childAge(child);
   $('childName').textContent = `${child.avatar} ${child.name}${age !== '' ? ' · ' + age + ' anos' : ''}`;
@@ -360,16 +399,17 @@ function renderChild(){
   $('childPeriod').textContent = `Rotina da ${periods.find(p => p.id === period).label.toLowerCase()}`;
   const next = nextTask(child, period);
   const waiting = next ? null : nextUpcomingTask(child);
+  $('taskFocus').classList.toggle('waiting', !next);
   $('taskFocus').innerHTML = next ? `
     <div class="focus-emoji">${next.emoji || '✅'}</div>
     <div class="focus-name">${next.name}</div>
     <div class="focus-time">${next.time || 'Sem horário'}</div>
   ` : waiting ? `
-    <div class="focus-emoji">⏳</div>
+    <div class="focus-emoji">${visual.emoji}</div>
     <div class="focus-name">Modo espera</div>
     <div class="focus-time">Próxima: ${waiting.task.name} ${waiting.task.time ? 'às ' + waiting.task.time : ''}</div>
   ` : `
-    <div class="focus-emoji">⭐</div>
+    <div class="focus-emoji">${visual.emoji}</div>
     <div class="focus-name">Tudo pronto</div>
     <div class="focus-time">Sem tarefa pendente agora</div>
   `;
@@ -497,7 +537,7 @@ function escapeAttr(value){
 }
 
 function addChild(){
-  const child = { id: crypto.randomUUID(), name: `Filho ${appState.children.length + 1}`, birthDate: '', avatar: '⭐', routines: emptyRoutines(), done: {} };
+  const child = { id: crypto.randomUUID(), type:'child', name: `Filho ${childProfiles().length + 1}`, birthDate: '', avatar: '⭐', profileTheme:'bichinhos', routines: emptyRoutines(), done: {} };
   appState.children.push(child);
   editingChildId = child.id;
   selectedChildId = child.id;

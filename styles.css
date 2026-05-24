@@ -10,6 +10,7 @@
   --yellow: #f2bc42;
   --red: #d85555;
   --shadow: 0 10px 28px rgba(28, 75, 86, .12);
+  --child-profile-bg: linear-gradient(135deg,#d7f8dc,#b4e4ff);
   font-family: Nunito, system-ui, sans-serif;
 }
 body.theme-ceu { --bg:#eef7f6; --surface:#ffffff; --line:#cfe3df; --text:#18373a; --muted:#668187; --accent:#3d7f91; --accent-2:#216171; --green:#3c9b6d; --yellow:#f2bc42; }
@@ -49,6 +50,11 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .avatar { width: 52px; height: 52px; border-radius: 15px; display: grid; place-items: center; background: #e5f1ef; font-size: 2rem; }
 .child-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(138px, .45fr); gap: 8px; margin-top: 12px; }
 .child-card-actions { display: flex; gap: 8px; margin-top: 10px; }
+.profile-theme-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.profile-theme-chip { padding: 8px 10px; border: 2px solid var(--line); background: #f7fbfb; color: var(--text); font-size: .82rem; }
+.profile-theme-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(61,127,145,.12); }
+.type-toggle { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; text-transform: none; font-size: .9rem; color: var(--text); }
+.type-toggle input { width: auto; }
 .routine-editor { margin-top: 12px; }
 .period-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 14px 0; }
 .period-tabs button { background: #e5f1ef; color: var(--muted); }
@@ -65,12 +71,13 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .child-picker { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 12px; }
 .child-picker button { background: var(--surface); color: var(--text); border: 2px solid var(--line); white-space: nowrap; }
 .child-picker button.active { border-color: var(--green); color: var(--green); background: rgba(60,155,109,.12); }
-.child-board { text-align: center; }
+.child-board { text-align: center; background: var(--child-profile-bg); }
 .child-clock { color: var(--accent); font-size: clamp(2.8rem, 14vw, 5.5rem); font-weight: 900; line-height: 1; }
 .child-name { font-size: clamp(1.2rem, 5vw, 2rem); font-weight: 900; margin-top: 6px; }
 .child-period { color: var(--muted); font-weight: 900; margin-bottom: 16px; }
 .child-stars { display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: rgba(242,188,66,.18); border: 2px solid rgba(242,188,66,.45); color: var(--text); border-radius: 999px; padding: 6px 12px; font-weight: 900; margin-bottom: 12px; }
-.task-focus { display: grid; gap: 8px; place-items: center; background: #e5f1ef; border-radius: 18px; padding: 18px; margin-bottom: 14px; }
+.task-focus { display: grid; gap: 8px; place-items: center; background: rgba(255,255,255,.72); border-radius: 18px; padding: 18px; margin-bottom: 14px; }
+.task-focus.waiting { background: linear-gradient(135deg, rgba(255,255,255,.85), rgba(242,188,66,.28), rgba(143,155,255,.25)); }
 .focus-emoji { font-size: clamp(3rem, 14vw, 6rem); }
 .focus-name { font-size: clamp(1.4rem, 7vw, 2.6rem); font-weight: 900; }
 .focus-time { color: var(--muted); font-weight: 900; }
