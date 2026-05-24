@@ -52,6 +52,23 @@
       </section>
 
       <section id="momView" hidden>
+        <div class="mom-menu" id="momMenu">
+          <div>
+            <div class="menu-clock" id="momBigClock">00:00:00</div>
+            <div class="menu-date" id="momBigDate">Hoje</div>
+          </div>
+          <div class="time-speech-panel">
+            <button class="primary" id="speakTimeBigBtn">Falar hora</button>
+            <label for="timeAnnounceInterval">Falar hora em quanto tempo</label>
+            <select id="timeAnnounceInterval">
+              <option value="0">Não repetir</option>
+              <option value="15">A cada 15 minutos</option>
+              <option value="30">A cada 30 minutos</option>
+              <option value="60">A cada 1 hora</option>
+            </select>
+          </div>
+        </div>
+
         <div class="settings-strip">
           <div>
             <div class="section-title">Temas</div>
@@ -80,6 +97,8 @@
             </div>
             <button class="secondary" id="closeEditorBtn">Fechar</button>
           </div>
+          <div class="profile-detail-form" id="profileDetailForm"></div>
+          <div class="profile-calendar" id="profileCalendar"></div>
           <div class="period-tabs" id="periodTabs"></div>
           <div class="task-form">
             <input id="taskEmoji" maxlength="2" placeholder="✅" readonly>

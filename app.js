@@ -42,6 +42,8 @@ let selectedTaskDays = new Set([0,1,2,3,4,5,6]);
 let selectedTaskEmoji = '✅';
 let firedAlarmKeys = new Set();
 let persistentAlarm = null;
+let timeAnnounceInterval = Number(localStorage.getItem('rf_timeAnnounceInterval') || 0);
+let timeAnnounceTimer = null;
 
 function loadLocalState(){
   const saved = localStorage.getItem('rf_state');
@@ -219,6 +221,7 @@ function renderAll(){
   applyTheme(appState.theme);
   renderMode();
   renderThemes();
+  renderTimeSpeechSettings();
   renderMom();
   renderChild();
 }
@@ -256,40 +259,81 @@ function renderMom(){
   });
   const visibleProfiles = appState.children.filter(child => selectedProfileTab === 'mom' ? child.type === 'mom' : child.type !== 'mom');
   $('childrenGrid').innerHTML = visibleProfiles.map(child => `
-    <div class="child-card profile-card-${child.type}">
-      <div class="child-card-head">
-        <div class="avatar">${child.avatar}</div>
-        <div>
-          <div class="task-name">${child.name}</div>
-          <div class="task-time">${child.type === 'mom' ? 'Rotina da mãe' : ageText(child)} · ⭐ ${child.stars || 0}</div>
-        </div>
-      </div>
-      <div class="child-fields">
-        <input value="${escapeAttr(child.name)}" data-child-name="${child.id}" placeholder="Nome">
-        <input value="${escapeAttr(child.birthDate)}" data-child-birth="${child.id}" type="date" title="Data de nascimento">
-      </div>
-      <div class="child-fields">
-        <input value="${escapeAttr(child.avatar)}" data-child-avatar="${child.id}" maxlength="2" placeholder="⭐">
-        <button class="secondary" data-edit="${child.id}">Rotina</button>
-      </div>
-      <div class="profile-theme-row">
-        ${profileThemes.map(theme => `<button class="profile-theme-chip ${child.profileTheme===theme.id?'active':''}" data-profile-theme="${child.id}:${theme.id}">${theme.emoji} ${theme.label}</button>`).join('')}
-      </div>
-      <label class="type-toggle">
-        <input type="checkbox" ${child.type === 'mom' ? 'checked' : ''} data-profile-type="${child.id}">
-        Rotina da mãe
-      </label>
-      <div class="child-card-actions">
-        <button class="secondary" data-speak="${child.id}">Falar</button>
-        <button class="secondary" data-remove="${child.id}">Remover</button>
-      </div>
-    </div>
+    <button class="profile-tile ${editingChildId===child.id?'active':''} profile-card-${child.type}" style="--tile-profile-bg:${profileThemeById(child.profileTheme).bg}" data-open-profile="${child.id}">
+      <div class="profile-tile-avatar">${child.avatar}</div>
+      <div class="profile-tile-name">${child.name}</div>
+      <div class="profile-tile-meta">${child.type === 'mom' ? 'Rotina da mãe' : ageText(child)}</div>
+    </button>
   `).join('');
+  if(editingChildId && !visibleProfiles.some(child => child.id === editingChildId)) editingChildId = '';
   bindChildCards();
   if(editingChildId) renderEditor();
+  else $('routineEditor').hidden = true;
+}
+
+function profileDetailHtml(child){
+  return `
+    <div class="profile-detail-head">
+      <div class="avatar">${child.avatar}</div>
+      <div>
+        <div class="task-name">${child.name}</div>
+        <div class="task-time">${child.type === 'mom' ? 'Rotina da mãe' : ageText(child)} · ⭐ ${child.stars || 0}</div>
+      </div>
+    </div>
+    <div class="profile-detail-grid">
+      <label>
+        Nome
+        <input value="${escapeAttr(child.name)}" data-child-name="${child.id}" placeholder="Nome">
+      </label>
+      <label>
+        Data de nascimento
+        <input value="${escapeAttr(child.birthDate)}" data-child-birth="${child.id}" type="date">
+      </label>
+      <label>
+        Emoji grande
+        <input value="${escapeAttr(child.avatar)}" data-child-avatar="${child.id}" maxlength="2" placeholder="⭐">
+      </label>
+    </div>
+    <div class="profile-theme-row">
+      ${profileThemes.map(theme => `<button class="profile-theme-chip ${child.profileTheme===theme.id?'active':''}" data-profile-theme="${child.id}:${theme.id}">${theme.emoji} ${theme.label}</button>`).join('')}
+    </div>
+    <label class="type-toggle">
+      <input type="checkbox" ${child.type === 'mom' ? 'checked' : ''} data-profile-type="${child.id}">
+      Essa é rotina da mãe
+    </label>
+    <div class="child-card-actions">
+      <button class="secondary" data-speak="${child.id}">Falar rotina</button>
+      <button class="secondary" data-remove="${child.id}">Remover perfil</button>
+    </div>
+  `;
+}
+
+function renderProfileCalendar(child){
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+  const blanks = Array.from({ length: first.getDay() }, () => '<div class="calendar-day blank"></div>');
+  const days = Array.from({ length: last.getDate() }, (_, index) => {
+    const day = index + 1;
+    const dateKey = `${year}-${String(month + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const hasDone = child.done?.[dateKey] && Object.values(child.done[dateKey]).some(Boolean);
+    const isToday = day === now.getDate();
+    return `<div class="calendar-day ${hasDone?'marked':''} ${isToday?'today':''}">
+      <span>${day}</span>
+      <strong>${hasDone ? '⭐' : ''}</strong>
+    </div>`;
+  });
+  return `
+    <div class="calendar-title">Calendário de ${months[month]} ${year}</div>
+    <div class="calendar-week">${weekDays.map(day => `<span>${day}</span>`).join('')}</div>
+    <div class="calendar-grid">${blanks.join('')}${days.join('')}</div>
+  `;
 }
 
 function bindChildCards(){
+  document.querySelectorAll('[data-open-profile]').forEach(el => el.addEventListener('click', () => openEditor(el.dataset.openProfile)));
   document.querySelectorAll('[data-child-name]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childName, { name: el.value || 'Criança' })));
   document.querySelectorAll('[data-child-birth]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childBirth, { birthDate: el.value })));
   document.querySelectorAll('[data-child-avatar]').forEach(el => el.addEventListener('input', () => updateChild(el.dataset.childAvatar, { avatar: el.value || '⭐' })));
@@ -329,13 +373,20 @@ function openEditor(id){
   editingPeriod = currentPeriod();
   $('routineEditor').hidden = false;
   renderEditor();
+  $('routineEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderEditor(){
   const child = childById(editingChildId);
+  const visual = profileThemeById(child.profileTheme);
+  $('routineEditor').style.setProperty('--editor-profile-bg', visual.bg);
+  $('routineEditor').classList.toggle('profile-dark', child.profileTheme === 'espaco');
   $('editorTitle').textContent = `${child.avatar} Rotina de ${child.name}`;
   $('editorSubtitle').textContent = ageText(child);
+  $('profileDetailForm').innerHTML = profileDetailHtml(child);
+  $('profileCalendar').innerHTML = renderProfileCalendar(child);
   $('periodTabs').innerHTML = periods.map(p => `<button class="${p.id===editingPeriod?'active':''}" data-period="${p.id}">${p.emoji} ${p.label}</button>`).join('');
+  bindChildCards();
   document.querySelectorAll('[data-period]').forEach(btn => btn.addEventListener('click', () => { editingPeriod = btn.dataset.period; renderEditor(); }));
   renderEmojiPicker();
   renderWeekdayPicker();
@@ -559,11 +610,33 @@ function speakTime(){
   speak(`${dateSpeech()} Agora são ${String(d.getHours()).padStart(2,'0')} horas e ${String(d.getMinutes()).padStart(2,'0')} minutos.`);
 }
 
+function renderTimeSpeechSettings(){
+  const select = $('timeAnnounceInterval');
+  if(!select) return;
+  select.value = String(timeAnnounceInterval);
+}
+
+function setTimeAnnounceInterval(minutes){
+  timeAnnounceInterval = Number(minutes || 0);
+  localStorage.setItem('rf_timeAnnounceInterval', String(timeAnnounceInterval));
+  startTimeAnnouncer();
+}
+
+function startTimeAnnouncer(){
+  clearInterval(timeAnnounceTimer);
+  timeAnnounceTimer = null;
+  if(timeAnnounceInterval > 0){
+    timeAnnounceTimer = setInterval(speakTime, timeAnnounceInterval * 60 * 1000);
+  }
+}
+
 function tick(){
   const d = new Date();
   const timeText = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
   if($('momClock')) $('momClock').textContent = timeText;
   if($('momDate')) $('momDate').textContent = `${longWeekDays[d.getDay()]}, ${d.getDate()} de ${months[d.getMonth()]}`;
+  if($('momBigClock')) $('momBigClock').textContent = timeText;
+  if($('momBigDate')) $('momBigDate').textContent = `${longWeekDays[d.getDay()]}, ${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
   $('clock').textContent = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
@@ -627,6 +700,8 @@ $('addTaskBtn').addEventListener('click', addTask);
 $('doneBtn').addEventListener('click', markDone);
 $('repeatBtn').addEventListener('click', () => speakChild(childById(selectedChildId)));
 $('speakTimeBtn').addEventListener('click', speakTime);
+$('speakTimeBigBtn').addEventListener('click', speakTime);
+$('timeAnnounceInterval').addEventListener('change', () => setTimeAnnounceInterval($('timeAnnounceInterval').value));
 document.querySelectorAll('.segmented button').forEach(btn => btn.addEventListener('click', () => {
   if(mode === 'child' && btn.dataset.mode === 'mom'){
     const pin = prompt('Senha do modo mãe:');
@@ -639,6 +714,7 @@ document.querySelectorAll('.segmented button').forEach(btn => btn.addEventListen
 setInterval(tick, 1000);
 setInterval(checkTaskAlarms, 30000);
 tick();
+startTimeAnnouncer();
 if(defaultConfigText && familyCode) connectFirebase();
 else renderAll();
 if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});

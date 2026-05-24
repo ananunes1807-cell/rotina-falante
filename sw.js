@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rotina-falante-nova-v7';
+const CACHE_NAME = 'rotina-falante-nova-v8';
 const FILES = [
   './index.html',
   './styles.css',
