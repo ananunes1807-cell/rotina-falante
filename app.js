@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
