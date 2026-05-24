@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v19';
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -33,6 +33,69 @@ const mascots = {
   espaco: { emoji:'🚀', name:'Foguetinho', wait:'O foguete está em órbita até a próxima missão.' },
   mae: { emoji:'☕', name:'Lembrete da mãe', wait:'Seu cantinho está em espera.' },
 };
+const routineTemplates = [
+  {
+    id: 'escola',
+    label: 'Rotina escolar',
+    emoji: '🎒',
+    tasks: {
+      manha: [
+        { emoji:'🦷', name:'Escovar os dentes', time:'07:00', days:[1,2,3,4,5], steps:['pegar escova','passar pasta','escovar com calma'] },
+        { emoji:'👕', name:'Colocar uniforme', time:'07:15', days:[1,2,3,4,5], steps:['pegar roupa','vestir','calçar sapato'] },
+        { emoji:'🎒', name:'Pegar mochila', time:'07:30', days:[1,2,3,4,5], steps:['garrafa','lanche','material'] }
+      ],
+      tarde: [
+        { emoji:'📚', name:'Tarefa da escola', time:'15:00', days:[1,2,3,4,5], steps:['sentar','abrir caderno','fazer uma parte por vez'] }
+      ],
+      noite: []
+    }
+  },
+  {
+    id: 'sono',
+    label: 'Rotina do sono',
+    emoji: '😴',
+    tasks: {
+      manha: [],
+      tarde: [],
+      noite: [
+        { emoji:'🛁', name:'Banho', time:'19:00', days:[0,1,2,3,4,5,6], steps:['pegar toalha','tomar banho','colocar pijama'] },
+        { emoji:'🦷', name:'Escovar os dentes', time:'19:40', days:[0,1,2,3,4,5,6], steps:['escova','pasta','enxaguar'] },
+        { emoji:'📖', name:'História calma', time:'20:00', days:[0,1,2,3,4,5,6], steps:['escolher livro','deitar','ouvir com calma'] },
+        { emoji:'😴', name:'Dormir', time:'20:30', days:[0,1,2,3,4,5,6], steps:['luz baixa','cobertor','descansar'] }
+      ]
+    }
+  },
+  {
+    id: 'remedio',
+    label: 'Remédios',
+    emoji: '💊',
+    tasks: {
+      manha: [
+        { emoji:'💊', name:'Remédio da manhã', time:'08:00', days:[0,1,2,3,4,5,6], steps:['pegar remédio','tomar com água','avisar que tomou'] }
+      ],
+      tarde: [],
+      noite: [
+        { emoji:'💊', name:'Remédio da noite', time:'20:00', days:[0,1,2,3,4,5,6], steps:['pegar remédio','tomar com água','guardar'] }
+      ]
+    }
+  },
+  {
+    id: 'fimsemana',
+    label: 'Fim de semana',
+    emoji: '🌈',
+    tasks: {
+      manha: [
+        { emoji:'🍽️', name:'Café da manhã', time:'09:00', days:[0,6], steps:['sentar','comer','guardar prato'] }
+      ],
+      tarde: [
+        { emoji:'🎮', name:'Tempo livre', time:'15:00', days:[0,6], steps:['escolher brincadeira','combinar tempo','guardar depois'] }
+      ],
+      noite: [
+        { emoji:'🛁', name:'Banho', time:'19:30', days:[0,6], steps:['toalha','banho','pijama'] }
+      ]
+    }
+  }
+];
 const defaultConfigText = localStorage.getItem('rf_firebaseConfig') || '';
 let familyCode = localStorage.getItem('rf_familyCode') || '';
 let momPin = localStorage.getItem('rf_momPin') || '1234';
@@ -288,6 +351,8 @@ function renderMode(){
 
 function renderMom(){
   const inMomTab = selectedProfileTab === 'mom';
+  renderMomDashboard();
+  renderMomTools();
   $('profilesTitle').textContent = inMomTab ? 'Minha rotina' : 'Filhos e rotinas';
   $('profilesHint').textContent = inMomTab ? 'Edite seu nome, seu emoji e sua rotina separada.' : 'Edite aqui. Os aparelhos das crianças atualizam automaticamente.';
   $('addChildBtn').hidden = inMomTab;
@@ -312,6 +377,81 @@ function renderMom(){
   bindChildCards();
   if(editingChildId) renderEditor();
   else $('routineEditor').hidden = true;
+}
+
+function todayAgendaItems(){
+  const today = new Date().getDay();
+  const items = [];
+  appState.children.forEach(child => {
+    periods.forEach(period => {
+      (child.routines[period.id] || []).forEach(task => {
+        if(task.days && !task.days.includes(today)) return;
+        items.push({
+          child,
+          period,
+          task,
+          total: task.time ? timeToMinutes(task.time) : 9999,
+          done: isDone(child, task.id)
+        });
+      });
+    });
+  });
+  return items.sort((a,b) => a.total - b.total || a.child.name.localeCompare(b.child.name));
+}
+
+function renderMomDashboard(){
+  if(!$('todayAgenda')) return;
+  const items = todayAgendaItems();
+  const pending = items.filter(item => !item.done);
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const next = pending.find(item => item.total >= nowMin) || pending[0];
+  $('nextAlarmCard').innerHTML = next ? `
+    <div class="next-alarm-time">${next.task.time || 'Sem horário'}</div>
+    <div><strong>${next.child.avatar} ${escapeHtml(next.child.name)}</strong></div>
+    <div class="muted">${next.task.emoji || '✅'} ${escapeHtml(next.task.name)} · ${next.period.label}</div>
+    <button class="secondary small-btn" data-edit-agenda="${next.child.id}">Editar perfil</button>
+  ` : '<div class="next-alarm-time">Tudo feito</div><div class="muted">Nenhuma tarefa pendente hoje.</div>';
+  const alerts = momAlerts();
+  $('momAlerts').innerHTML = alerts.length ? alerts.map(alert => `<div class="alert-line">${alert}</div>`).join('') : '<div class="alert-line good">Tudo certo por aqui.</div>';
+  $('todayAgenda').innerHTML = items.length ? items.map(item => agendaItemHtml(item)).join('') : '<div class="empty-state">Nenhuma tarefa marcada para hoje.</div>';
+}
+
+function momAlerts(){
+  const alerts = [];
+  childProfiles().forEach(child => {
+    if(!child.birthDate) alerts.push(`${child.avatar} ${escapeHtml(child.name)} sem nascimento.`);
+    const total = periods.flatMap(period => child.routines[period.id] || []).length;
+    if(!total) alerts.push(`${child.avatar} ${escapeHtml(child.name)} sem tarefas.`);
+  });
+  const noTime = appState.children.flatMap(child => periods.flatMap(period => (child.routines[period.id] || []).map(task => ({ child, task })))).filter(item => !item.task.time);
+  if(noTime.length) alerts.push(`${noTime.length} tarefa${noTime.length > 1 ? 's' : ''} sem horário.`);
+  return alerts.slice(0, 5);
+}
+
+function agendaItemHtml(item){
+  const status = item.done ? 'Feita' : item.total === 9999 ? 'Sem horário' : countdownText(item.total);
+  return `
+    <div class="agenda-row ${item.done ? 'done' : ''}">
+      <div class="agenda-time">${item.task.time || '--:--'}</div>
+      <div class="agenda-main">
+        <div class="task-name">${item.task.emoji || '✅'} ${escapeHtml(item.task.name)}</div>
+        <div class="task-time">${item.child.avatar} ${escapeHtml(item.child.name)} · ${item.period.label} · ${status}</div>
+      </div>
+      <button class="secondary small-btn" data-edit-agenda="${item.child.id}">Editar</button>
+      <button class="secondary small-btn" data-speak-agenda-task="${item.child.id}:${item.task.id}">🔊</button>
+    </div>
+  `;
+}
+
+function renderMomTools(){
+  if(!$('templateGrid')) return;
+  $('templateGrid').innerHTML = routineTemplates.map(template => `<button class="template-btn" data-template="${template.id}">${template.emoji} ${template.label}</button>`).join('');
+  const options = appState.children.map(child => `<option value="${child.id}">${child.avatar} ${escapeHtml(child.name)}</option>`).join('');
+  $('copyFrom').innerHTML = options;
+  $('copyTo').innerHTML = options;
+  const current = editingChildId || selectedChildId || childProfiles()[0]?.id || momProfile().id;
+  $('copyFrom').value = current;
+  $('copyTo').value = appState.children.find(child => child.id !== current)?.id || current;
 }
 
 function profileDetailHtml(child){
@@ -535,6 +675,59 @@ function moveTask(taskId, dir){
   renderChild();
 }
 
+function cloneTask(task){
+  return {
+    ...task,
+    id: crypto.randomUUID(),
+    days: Array.isArray(task.days) ? [...task.days] : [0,1,2,3,4,5,6],
+    steps: Array.isArray(task.steps) ? [...task.steps] : []
+  };
+}
+
+function applyTemplate(templateId){
+  const template = routineTemplates.find(item => item.id === templateId);
+  if(!template) return;
+  const target = childById(editingChildId || selectedChildId || childProfiles()[0]?.id || momProfile().id);
+  periods.forEach(period => {
+    target.routines[period.id] ||= [];
+    (template.tasks[period.id] || []).forEach(task => target.routines[period.id].push(cloneTask(task)));
+  });
+  editingChildId = target.id;
+  selectedProfileTab = target.type === 'mom' ? 'mom' : 'children';
+  localStorage.setItem('rf_profileTab', selectedProfileTab);
+  scheduleSave();
+  renderAll();
+  openEditor(target.id);
+}
+
+function copyRoutine(){
+  const from = childById($('copyFrom').value);
+  const to = childById($('copyTo').value);
+  if(!from || !to || from.id === to.id) return;
+  const ok = confirm(`Copiar toda a rotina de ${from.name} para ${to.name}? Isso troca as tarefas atuais do destino.`);
+  if(!ok) return;
+  to.routines = {
+    manha: (from.routines.manha || []).map(cloneTask),
+    tarde: (from.routines.tarde || []).map(cloneTask),
+    noite: (from.routines.noite || []).map(cloneTask)
+  };
+  editingChildId = to.id;
+  selectedProfileTab = to.type === 'mom' ? 'mom' : 'children';
+  localStorage.setItem('rf_profileTab', selectedProfileTab);
+  scheduleSave();
+  renderAll();
+  openEditor(to.id);
+}
+
+function editAgendaProfile(id){
+  const profile = childById(id);
+  selectedProfileTab = profile.type === 'mom' ? 'mom' : 'children';
+  localStorage.setItem('rf_profileTab', selectedProfileTab);
+  editingChildId = id;
+  renderMom();
+  openEditor(id);
+}
+
 function renderChild(){
   if(!$('childPicker') || !$('taskFocus') || !$('todayList')) return;
   const visibleChildren = childProfiles();
@@ -645,6 +838,13 @@ function speakTodayTasks(){
   if(!tasks.length) return speak(`${child.name}, não tem tarefas marcadas para hoje.`);
   const text = tasks.map(task => `${task.period}: ${task.name}${task.time ? ' às ' + task.time : ''}`).join('. ');
   speak(`${child.name}, suas tarefas de hoje são: ${text}.`);
+}
+
+function speakMomToday(){
+  const items = todayAgendaItems();
+  if(!items.length) return speak('Hoje não tem tarefas marcadas na agenda.');
+  const text = items.map(item => `${item.task.time || 'sem horário'}, ${item.child.name}, ${item.task.name}`).join('. ');
+  speak(`Agenda de hoje: ${text}.`);
 }
 
 function countdownText(targetMin){
@@ -932,10 +1132,18 @@ document.addEventListener('click', (event) => {
   if(target.id === 'doneBtn') return run(markDone);
   if(target.id === 'repeatBtn') return run(speakCurrentMission);
   if(target.id === 'speakTodayBtn') return run(speakTodayTasks);
+  if(target.id === 'speakMomTodayBtn') return run(speakMomToday);
+  if(target.id === 'copyRoutineBtn') return run(copyRoutine);
   if(target.id === 'stopSpeechBtn') return run(stopSpeaking);
   if(target.id === 'helpBtn') return run(askForHelp);
   if(target.id === 'speakTimeBtn' || target.id === 'speakTimeBigBtn' || target.id === 'childSpeakTimeBtn') return run(speakTime);
   if(target.dataset.speakTask) return run(() => speakTask(childById(selectedChildId), target.dataset.speakTask));
+  if(target.dataset.speakAgendaTask){
+    const [childId, taskId] = target.dataset.speakAgendaTask.split(':');
+    return run(() => speakTask(childById(childId), taskId));
+  }
+  if(target.dataset.editAgenda) return run(() => editAgendaProfile(target.dataset.editAgenda));
+  if(target.dataset.template) return run(() => applyTemplate(target.dataset.template));
 });
 function switchMode(nextMode){
   if(mode === 'child' && nextMode === 'mom'){

@@ -49,7 +49,7 @@ h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 3rem); letter-spacing: 0; }
 p { margin: 0; }
 .muted, #syncStatus { color: var(--muted); font-weight: 800; line-height: 1.35; }
 .section-title { font-size: 1.2rem; font-weight: 900; margin-bottom: 6px; }
-.setup-panel, .routine-editor, .child-board, .settings-strip, .mom-menu { background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 16px; box-shadow: var(--shadow); }
+.setup-panel, .routine-editor, .child-board, .settings-strip, .mom-menu, .agenda-panel, .mom-tools, .mom-card { background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 16px; box-shadow: var(--shadow); }
 label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: .78rem; font-weight: 900; text-transform: uppercase; }
 textarea, input, select { width: 100%; border: 2px solid var(--line); background: #f7fbfb; color: var(--text); border-radius: 12px; padding: 12px; outline: none; }
 textarea { min-height: 132px; resize: vertical; font-family: ui-monospace, Consolas, monospace; font-size: .86rem; }
@@ -69,6 +69,24 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .menu-date { font-size: clamp(1rem, 3vw, 1.35rem); color: var(--muted); font-weight: 900; margin-top: 8px; }
 .time-speech-panel { position: relative; z-index: 1; display: grid; gap: 8px; background: rgba(255,255,255,.72); border: 2px solid var(--line); border-radius: 16px; padding: 12px; }
 .time-speech-panel label { margin: 2px 0 0; }
+.mom-dashboard { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.mom-card { min-height: 142px; }
+.mom-card-content { display: grid; gap: 6px; align-content: start; }
+.next-alarm-time { font-size: clamp(2rem, 8vw, 3.4rem); line-height: 1; font-weight: 900; color: var(--accent); }
+.alert-line { background: #f7fbfb; border: 2px solid var(--line); border-radius: 12px; padding: 8px 10px; font-weight: 900; color: var(--muted); }
+.alert-line.good { color: var(--green); border-color: rgba(60,155,109,.35); background: rgba(60,155,109,.08); }
+.agenda-panel { margin-bottom: 14px; }
+.agenda-row { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 10px; border: 2px solid var(--line); border-radius: 14px; background: #f7fbfb; margin-top: 8px; }
+.agenda-row.done { opacity: .62; background: rgba(60,155,109,.08); }
+.agenda-time { font-size: 1.25rem; font-weight: 900; color: var(--accent); }
+.small-btn { padding: 8px 10px; font-size: .9rem; }
+.empty-state { border: 2px dashed var(--line); border-radius: 14px; padding: 16px; color: var(--muted); font-weight: 900; text-align: center; margin-top: 8px; }
+.mom-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr); gap: 14px; margin-bottom: 14px; }
+.tool-box { display: grid; gap: 8px; align-content: start; }
+.template-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.template-btn { background: #f7fbfb; color: var(--text); border: 2px solid var(--line); text-align: left; min-height: 54px; }
+.template-btn:hover { border-color: var(--accent); color: var(--accent); }
+.copy-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; }
 .children-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 12px 0 16px; }
 .profile-tile { min-height: 160px; background: var(--tile-profile-bg, var(--surface)); color: var(--text); border: 2px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); display: grid; place-items: center; gap: 5px; padding: 18px 12px; text-align: center; position: relative; overflow: hidden; }
 .profile-tile::after { content: '✦ ✿ ☁'; position: absolute; inset: auto 10px 6px auto; opacity: .18; font-size: 2.4rem; pointer-events: none; }
@@ -170,6 +188,9 @@ body.child-theme-active .primary, body.child-theme-active .secondary { border-ra
 .celebration-text { color: var(--muted); font-weight: 900; margin-top: 8px; }
 @media (max-width: 680px) {
   .mom-menu { grid-template-columns: 1fr; }
+  .mom-dashboard, .mom-tools, .copy-grid { grid-template-columns: 1fr; }
+  .agenda-row { grid-template-columns: 70px minmax(0, 1fr); }
+  .agenda-row button { width: 100%; }
   .task-form { grid-template-columns: 62px 1fr; }
   .profile-detail-grid { grid-template-columns: 1fr; }
   .task-form button, .task-form input[type=time] { grid-column: span 1; }
