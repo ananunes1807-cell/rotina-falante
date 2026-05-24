@@ -137,7 +137,9 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .child-board { text-align: center; background: var(--child-profile-bg); backdrop-filter: blur(2px); border-radius: 30px; border: 3px solid rgba(255,255,255,.72); padding: clamp(18px, 4vw, 30px); position: relative; overflow: hidden; }
 .child-board::before { content: '✨'; position: absolute; left: 18px; top: 14px; font-size: 2.2rem; opacity: .36; }
 .child-board::after { content: '☁️'; position: absolute; right: 18px; top: 18px; font-size: 2.6rem; opacity: .34; }
+.child-clock-row { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
 .child-clock { color: var(--accent); font-size: clamp(2.8rem, 14vw, 5.5rem); font-weight: 900; line-height: 1; }
+.speak-part-btn { width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border-radius: 999px; background: rgba(255,255,255,.86); border: 2px solid rgba(255,255,255,.95); color: var(--accent); box-shadow: 0 6px 16px rgba(28,75,86,.12); }
 .child-name { font-size: clamp(1.2rem, 5vw, 2rem); font-weight: 900; margin-top: 6px; }
 .child-period { color: var(--muted); font-weight: 900; margin-bottom: 16px; }
 .child-stars { display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: rgba(242,188,66,.18); border: 2px solid rgba(242,188,66,.45); color: var(--text); border-radius: 999px; padding: 6px 12px; font-weight: 900; margin-bottom: 12px; }

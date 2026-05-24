@@ -530,6 +530,7 @@ function moveTask(taskId, dir){
 }
 
 function renderChild(){
+  if(!$('childPicker') || !$('taskFocus') || !$('todayList')) return;
   const visibleChildren = childProfiles();
   if(!selectedChildId || !visibleChildren.some(child => child.id === selectedChildId)) selectedChildId = visibleChildren[0]?.id || appState.children[0].id;
   localStorage.setItem('rf_selectedChild', selectedChildId);
@@ -547,7 +548,7 @@ function renderChild(){
   const next = nextTask(child, period);
   const waiting = next ? null : nextUpcomingTask(child);
   renderDailyBadge(child);
-  $('mascotCard').innerHTML = `
+  if($('mascotCard')) $('mascotCard').innerHTML = `
     <div class="mascot-emoji">${next ? mascot.emoji : '😴'}</div>
     <div>
       <div class="mascot-name">${mascot.name}</div>
@@ -570,10 +571,13 @@ function renderChild(){
     <div class="focus-name">Dia completo</div>
     <div class="focus-time">Todas as missões de hoje foram feitas</div>
   `;
-  $('doneBtn').disabled = !next;
-  $('doneBtn').dataset.task = next?.id || '';
+  if($('doneBtn')){
+    $('doneBtn').disabled = !next;
+    $('doneBtn').dataset.task = next?.id || '';
+  }
   const tasks = tasksForToday(child, period);
   $('todayList').innerHTML = tasks.map(task => childTaskHtml(task, child)).join('');
+  document.querySelectorAll('[data-speak-task]').forEach(btn => btn.addEventListener('click', () => speakTask(child, btn.dataset.speakTask)));
 }
 
 function taskStepsHtml(task){
@@ -582,6 +586,7 @@ function taskStepsHtml(task){
 }
 
 function renderDailyBadge(child){
+  if(!$('dailyBadge')) return;
   const todayTasks = periods.flatMap(period => tasksForToday(child, period.id));
   const doneCount = todayTasks.filter(task => isDone(child, task.id)).length;
   const total = todayTasks.length;
@@ -601,9 +606,24 @@ function childTaskHtml(task, child){
         <div class="task-time">${done ? 'Feita hoje' : (task.time || 'Sem horário')}</div>
         ${steps}
       </div>
-      <div class="task-time">${done ? 'OK' : ''}</div>
+      <button class="speak-part-btn" data-speak-task="${task.id}" title="Falar esta tarefa">🔊</button>
     </div>
   `;
+}
+
+function speakTask(child, taskId){
+  const task = periods.flatMap(period => child.routines[period.id] || []).find(item => item.id === taskId);
+  if(!task) return;
+  const steps = Array.isArray(task.steps) && task.steps.length ? ` Passinhos: ${task.steps.join(', ')}.` : '';
+  speak(`${child.name}, tarefa: ${task.name}.${task.time ? ' Horário: ' + task.time + '.' : ''}${steps}`);
+}
+
+function speakTodayTasks(){
+  const child = childById(selectedChildId);
+  const tasks = periods.flatMap(period => tasksForToday(child, period.id).map(task => ({ ...task, period: period.label })));
+  if(!tasks.length) return speak(`${child.name}, não tem tarefas marcadas para hoje.`);
+  const text = tasks.map(task => `${task.period}: ${task.name}${task.time ? ' às ' + task.time : ''}`).join('. ');
+  speak(`${dateSpeech()} ${child.name}, suas tarefas de hoje são: ${text}.`);
 }
 
 function countdownText(targetMin){
@@ -851,12 +871,14 @@ $('clearConfigBtn').addEventListener('click', clearConfig);
 $('addChildBtn').addEventListener('click', addChild);
 $('closeEditorBtn').addEventListener('click', () => { editingChildId = ''; $('routineEditor').hidden = true; });
 $('addTaskBtn').addEventListener('click', addTask);
-$('doneBtn').addEventListener('click', markDone);
-$('repeatBtn').addEventListener('click', () => speakChild(childById(selectedChildId)));
-$('helpBtn').addEventListener('click', askForHelp);
-$('speakTimeBtn').addEventListener('click', speakTime);
-$('speakTimeBigBtn').addEventListener('click', speakTime);
-$('timeAnnounceInterval').addEventListener('change', () => setTimeAnnounceInterval($('timeAnnounceInterval').value));
+if($('doneBtn')) $('doneBtn').addEventListener('click', markDone);
+if($('repeatBtn')) $('repeatBtn').addEventListener('click', () => speakChild(childById(selectedChildId)));
+if($('speakTodayBtn')) $('speakTodayBtn').addEventListener('click', speakTodayTasks);
+if($('helpBtn')) $('helpBtn').addEventListener('click', askForHelp);
+if($('speakTimeBtn')) $('speakTimeBtn').addEventListener('click', speakTime);
+if($('speakTimeBigBtn')) $('speakTimeBigBtn').addEventListener('click', speakTime);
+if($('childSpeakTimeBtn')) $('childSpeakTimeBtn').addEventListener('click', speakTime);
+if($('timeAnnounceInterval')) $('timeAnnounceInterval').addEventListener('change', () => setTimeAnnounceInterval($('timeAnnounceInterval').value));
 document.querySelectorAll('.segmented button').forEach(btn => btn.addEventListener('click', () => {
   if(mode === 'child' && btn.dataset.mode === 'mom'){
     const pin = prompt('Senha do modo mãe:');
