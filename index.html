@@ -106,6 +106,7 @@
             <input id="taskTime" type="time">
             <button class="primary" id="addTaskBtn">Adicionar</button>
           </div>
+          <input class="steps-input" id="taskSteps" placeholder="Passinhos da tarefa, separados por vírgula. Ex: pegar escova, passar pasta, escovar">
           <div class="emoji-picker" id="emojiPicker"></div>
           <div class="weekday-picker" id="weekdayPicker"></div>
           <div id="taskList"></div>
@@ -119,6 +120,8 @@
           <div class="child-name" id="childName">Escolha uma criança</div>
           <div class="child-period" id="childPeriod">Rotina de agora</div>
           <div class="child-stars" id="childStars">⭐ 0</div>
+          <div class="daily-badge" id="dailyBadge">Missões de hoje</div>
+          <div class="mascot-card" id="mascotCard"></div>
           <div class="task-focus" id="taskFocus">
             <div class="focus-emoji">⭐</div>
             <div class="focus-name">Tudo pronto</div>
@@ -127,8 +130,10 @@
           <div class="child-actions">
             <button class="primary" id="doneBtn">Já fiz</button>
             <button class="secondary" id="repeatBtn">Falar de novo</button>
+            <button class="secondary" id="helpBtn">Preciso de ajuda</button>
           </div>
         </div>
+        <div class="celebration" id="celebration" hidden></div>
         <div class="today-list" id="todayList"></div>
       </section>
     </main>

@@ -10,7 +10,7 @@ const periods = [
 const weekDays = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const longWeekDays = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
 const months = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
-const taskEmojis = ['✅','🦷','🚿','👕','🍽️','🍎','💊','📚','🎒','🧹','🛁','🎮','📖','😴','☕','🚗','🧘','⭐'];
+const taskEmojis = ['✅','🦷','🚿','👕','🍽️','🍎','💊','📚','🎒','🧹','🛁','🎮','📖','😴','☕','🚗','🧘','⭐','🧸','🌈','🦕','🚀','🌸'];
 const profileEmojis = ['☕','🌸','💜','📚','🧘','⭐','🌈','🦋','🚀','🦕','🎮','🎨','⚽','🎵','🍓','💎'];
 const themes = [
   { id:'ceu', label:'Céu', emoji:'💙' },
@@ -19,12 +19,19 @@ const themes = [
   { id:'jardim', label:'Jardim', emoji:'🌿' },
 ];
 const profileThemes = [
-  { id:'bichinhos', label:'Bichinhos', emoji:'🐾', bg:'linear-gradient(135deg,#d7f8dc,#b4e4ff)' },
-  { id:'dinossauro', label:'Dino', emoji:'🦕', bg:'linear-gradient(135deg,#d8f5c8,#7ed957)' },
-  { id:'princesa', label:'Princesa', emoji:'🌸', bg:'linear-gradient(135deg,#ffe1f1,#ffc6df)' },
-  { id:'espaco', label:'Espaço', emoji:'🚀', bg:'linear-gradient(135deg,#202955,#6877ff)' },
-  { id:'mae', label:'Mãe', emoji:'☕', bg:'linear-gradient(135deg,#f2e8ff,#d8c7ff)' },
+  { id:'bichinhos', label:'Cantinho fofo', emoji:'🐾', bg:'linear-gradient(135deg,#d7f8dc,#b4e4ff)' },
+  { id:'dinossauro', label:'Mundo dino', emoji:'🦕', bg:'linear-gradient(135deg,#d8f5c8,#7ed957)' },
+  { id:'princesa', label:'Jardim mágico', emoji:'🌸', bg:'linear-gradient(135deg,#ffe1f1,#ffc6df)' },
+  { id:'espaco', label:'Espaço estelar', emoji:'🚀', bg:'linear-gradient(135deg,#202955,#6877ff)' },
+  { id:'mae', label:'Cantinho da mãe', emoji:'☕', bg:'linear-gradient(135deg,#f2e8ff,#d8c7ff)' },
 ];
+const mascots = {
+  bichinhos: { emoji:'🧸', name:'Amigo Fofo', wait:'Estou aqui esperando a próxima missão.' },
+  dinossauro: { emoji:'🦕', name:'Dino Guia', wait:'O Dino está descansando até a próxima missão.' },
+  princesa: { emoji:'🌸', name:'Flor Mágica', wait:'A flor está brilhando enquanto esperamos.' },
+  espaco: { emoji:'🚀', name:'Foguetinho', wait:'O foguete está em órbita até a próxima missão.' },
+  mae: { emoji:'☕', name:'Lembrete da mãe', wait:'Seu cantinho está em espera.' },
+};
 const defaultConfigText = localStorage.getItem('rf_firebaseConfig') || '';
 let familyCode = localStorage.getItem('rf_familyCode') || '';
 let momPin = localStorage.getItem('rf_momPin') || '1234';
@@ -97,6 +104,7 @@ function normalizeState(state){
     periods.forEach(p => child.routines[p.id] ||= []);
     periods.forEach(p => child.routines[p.id].forEach(task => {
       task.days = Array.isArray(task.days) ? task.days : [0,1,2,3,4,5,6];
+      task.steps = Array.isArray(task.steps) ? task.steps : [];
     }));
   });
   return state;
@@ -226,6 +234,10 @@ function momProfile(){
 
 function profileThemeById(id){
   return profileThemes.find(theme => theme.id === id) || profileThemes[0];
+}
+
+function mascotByTheme(id){
+  return mascots[id] || mascots.bichinhos;
 }
 
 function applyChildPageTheme(child){
@@ -446,12 +458,14 @@ function taskHtml(task, child){
   const dayLabel = (task.days || []).length === 7 ? 'Todos os dias' : (task.days || []).map(d => weekDays[d]).join(', ');
   const tasks = child.routines[editingPeriod] || [];
   const index = tasks.findIndex(item => item.id === task.id);
+  const steps = Array.isArray(task.steps) && task.steps.length ? `<div class="task-steps">${task.steps.map(step => `<span>${escapeHtml(step)}</span>`).join('')}</div>` : '';
   return `
     <div class="task-item agenda-block ${done?'done':''}">
       <div class="task-emoji">${task.emoji || '✅'}</div>
       <div>
         <div class="task-name">${task.name}</div>
         <div class="task-time">${task.time || 'Sem horário'} · ${dayLabel}</div>
+        ${steps}
       </div>
       <div class="task-actions">
         <button class="secondary" data-move-task="${task.id}:-1" ${index===0?'disabled':''}>↑</button>
@@ -482,12 +496,14 @@ function addTask(){
     emoji: selectedTaskEmoji || '✅',
     name,
     time: $('taskTime').value,
-    days: [...selectedTaskDays].sort((a,b) => a-b)
+    days: [...selectedTaskDays].sort((a,b) => a-b),
+    steps: $('taskSteps').value.split(',').map(step => step.trim()).filter(Boolean)
   });
   selectedTaskEmoji = '✅';
   $('taskEmoji').value = selectedTaskEmoji;
   $('taskName').value = '';
   $('taskTime').value = '';
+  $('taskSteps').value = '';
   scheduleSave();
   renderEditor();
   renderChild();
@@ -519,6 +535,7 @@ function renderChild(){
   localStorage.setItem('rf_selectedChild', selectedChildId);
   const child = childById(selectedChildId);
   const visual = profileThemeById(child.profileTheme);
+  const mascot = mascotByTheme(child.profileTheme);
   applyChildPageTheme(child);
   $('childPicker').innerHTML = visibleChildren.map(c => `<button class="${c.id===selectedChildId?'active':''}" data-pick-child="${c.id}">${c.avatar} ${c.name}</button>`).join('');
   document.querySelectorAll('[data-pick-child]').forEach(btn => btn.addEventListener('click', () => { selectedChildId = btn.dataset.pickChild; renderChild(); }));
@@ -529,19 +546,29 @@ function renderChild(){
   $('childPeriod').textContent = `Rotina da ${periods.find(p => p.id === period).label.toLowerCase()}`;
   const next = nextTask(child, period);
   const waiting = next ? null : nextUpcomingTask(child);
+  renderDailyBadge(child);
+  $('mascotCard').innerHTML = `
+    <div class="mascot-emoji">${next ? mascot.emoji : '😴'}</div>
+    <div>
+      <div class="mascot-name">${mascot.name}</div>
+      <div class="mascot-text">${next ? 'Vamos fazer uma missão de cada vez.' : mascot.wait}</div>
+    </div>
+  `;
   $('taskFocus').classList.toggle('waiting', !next);
   $('taskFocus').innerHTML = next ? `
     <div class="focus-emoji">${next.emoji || '✅'}</div>
     <div class="focus-name">${next.name}</div>
     <div class="focus-time">${next.time || 'Sem horário'}</div>
+    ${taskStepsHtml(next)}
   ` : waiting ? `
-    <div class="focus-emoji">${visual.emoji}</div>
+    <div class="focus-emoji">${mascot.emoji}</div>
     <div class="focus-name">Modo espera</div>
-    <div class="focus-time">Próxima: ${waiting.task.name} ${waiting.task.time ? 'às ' + waiting.task.time : ''}</div>
+    <div class="focus-time">Próxima missão: ${waiting.task.name} ${waiting.task.time ? 'às ' + waiting.task.time : ''}</div>
+    <div class="countdown-pill">${countdownText(waiting.total)}</div>
   ` : `
-    <div class="focus-emoji">${visual.emoji}</div>
-    <div class="focus-name">Tudo pronto</div>
-    <div class="focus-time">Sem tarefa pendente agora</div>
+    <div class="focus-emoji">🏅</div>
+    <div class="focus-name">Dia completo</div>
+    <div class="focus-time">Todas as missões de hoje foram feitas</div>
   `;
   $('doneBtn').disabled = !next;
   $('doneBtn').dataset.task = next?.id || '';
@@ -549,18 +576,46 @@ function renderChild(){
   $('todayList').innerHTML = tasks.map(task => childTaskHtml(task, child)).join('');
 }
 
+function taskStepsHtml(task){
+  if(!Array.isArray(task.steps) || !task.steps.length) return '';
+  return `<div class="focus-steps">${task.steps.map((step, index) => `<div><strong>${index + 1}</strong> ${escapeHtml(step)}</div>`).join('')}</div>`;
+}
+
+function renderDailyBadge(child){
+  const todayTasks = periods.flatMap(period => tasksForToday(child, period.id));
+  const doneCount = todayTasks.filter(task => isDone(child, task.id)).length;
+  const total = todayTasks.length;
+  const complete = total > 0 && doneCount === total;
+  $('dailyBadge').textContent = complete ? '🏅 Dia completo' : `⭐ ${doneCount}/${total} missões hoje`;
+  $('dailyBadge').classList.toggle('complete', complete);
+}
+
 function childTaskHtml(task, child){
   const done = isDone(child, task.id);
+  const steps = Array.isArray(task.steps) && task.steps.length ? `<div class="task-time">${task.steps.length} passinhos</div>` : '';
   return `
     <div class="task-item ${done?'done':''}">
       <div class="task-emoji">${done ? '✅' : (task.emoji || '✅')}</div>
       <div>
         <div class="task-name">${task.name}</div>
         <div class="task-time">${done ? 'Feita hoje' : (task.time || 'Sem horário')}</div>
+        ${steps}
       </div>
       <div class="task-time">${done ? 'OK' : ''}</div>
     </div>
   `;
+}
+
+function countdownText(targetMin){
+  if(targetMin >= 9999) return 'Sem horário marcado';
+  const now = new Date();
+  const currentMin = now.getHours() * 60 + now.getMinutes();
+  const diff = Math.max(0, targetMin - currentMin);
+  if(diff === 0) return 'Está chegando agora';
+  if(diff < 60) return `Faltam ${diff} min`;
+  const h = Math.floor(diff / 60);
+  const m = diff % 60;
+  return m ? `Faltam ${h}h ${m}min` : `Faltam ${h}h`;
 }
 
 function nextTask(child, period){
@@ -602,13 +657,31 @@ function markDone(){
   const child = childById(selectedChildId);
   const taskId = $('doneBtn').dataset.task;
   if(!taskId) return;
+  const task = periods.flatMap(period => child.routines[period.id] || []).find(item => item.id === taskId);
   child.done[todayKey()] ||= {};
   child.done[todayKey()][taskId] = true;
   child.stars = Number(child.stars || 0) + 1;
   if(persistentAlarm && persistentAlarm.task.id === taskId) persistentAlarm = null;
   scheduleSave();
-  speak(`Muito bem! Tarefa concluída. Você ganhou uma estrela. Agora você tem ${child.stars} estrelas.`);
+  showCelebration(child, task);
+  gentleAlarmSpeak(`Muito bem, ${child.name}! Missão concluída. Você ganhou uma estrela.`);
   renderChild();
+}
+
+function showCelebration(child, task){
+  const todayTasks = periods.flatMap(period => tasksForToday(child, period.id));
+  const doneCount = todayTasks.filter(item => item.id === task?.id || isDone(child, item.id)).length;
+  const complete = todayTasks.length > 0 && doneCount === todayTasks.length;
+  const box = $('celebration');
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="celebration-card">
+      <div class="celebration-emoji">${complete ? '🏅' : '⭐'}</div>
+      <div class="celebration-title">${complete ? 'Dia completo!' : 'Você conseguiu!'}</div>
+      <div class="celebration-text">${task ? escapeHtml(task.name) : 'Missão feita'} ${complete ? 'Todas as missões de hoje foram feitas.' : 'Mais uma estrelinha para você.'}</div>
+    </div>
+  `;
+  setTimeout(() => { box.hidden = true; }, 3800);
 }
 
 function speakChild(child){
@@ -619,7 +692,13 @@ function speakChild(child){
     if(waiting) return speak(`${dateSpeech()} ${child.name}, sua rotina de agora está completa. Modo espera. A próxima tarefa é ${waiting.task.name}${waiting.task.time ? ' às ' + waiting.task.time : ''}.`);
     return speak(`${dateSpeech()} ${child.name}, todas as tarefas foram feitas. Muito bem!`);
   }
-  speak(`${dateSpeech()} ${child.name}, sua rotina de agora é ${periods.find(p => p.id === period).label}. Você tem que fazer: ${task.name}. ${task.time ? 'Horário: ' + task.time + '.' : ''}`);
+  const steps = Array.isArray(task.steps) && task.steps.length ? ` Os passinhos são: ${task.steps.join(', ')}.` : '';
+  speak(`${dateSpeech()} ${child.name}, sua rotina de agora é ${periods.find(p => p.id === period).label}. Você tem que fazer: ${task.name}.${steps} ${task.time ? 'Horário: ' + task.time + '.' : ''}`);
+}
+
+function askForHelp(){
+  const child = childById(selectedChildId);
+  gentleAlarmSpeak(`${child.name} precisa de ajuda com a rotina.`);
 }
 
 function dateSpeech(){
@@ -738,6 +817,10 @@ function escapeAttr(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
 }
 
+function escapeHtml(value){
+  return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+}
+
 function addChild(){
   if(selectedProfileTab === 'mom'){
     const profile = momProfile();
@@ -770,6 +853,7 @@ $('closeEditorBtn').addEventListener('click', () => { editingChildId = ''; $('ro
 $('addTaskBtn').addEventListener('click', addTask);
 $('doneBtn').addEventListener('click', markDone);
 $('repeatBtn').addEventListener('click', () => speakChild(childById(selectedChildId)));
+$('helpBtn').addEventListener('click', askForHelp);
 $('speakTimeBtn').addEventListener('click', speakTime);
 $('speakTimeBigBtn').addEventListener('click', speakTime);
 $('timeAnnounceInterval').addEventListener('change', () => setTimeAnnounceInterval($('timeAnnounceInterval').value));

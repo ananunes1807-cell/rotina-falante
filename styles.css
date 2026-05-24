@@ -112,7 +112,8 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .period-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 14px 0; }
 .period-tabs button { background: #e5f1ef; color: var(--muted); }
 .period-tabs button.active { background: var(--yellow); color: #4a3600; }
-.task-form { display: grid; grid-template-columns: 62px 1fr 120px auto; gap: 8px; margin-bottom: 12px; }
+.task-form { display: grid; grid-template-columns: 62px 1fr 120px auto; gap: 8px; margin-bottom: 8px; }
+.steps-input { margin-bottom: 12px; }
 .weekday-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .weekday-btn { width: 44px; padding: 9px 0; background: #e5f1ef; color: var(--muted); border: 2px solid var(--line); }
 .weekday-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -128,6 +129,8 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .task-emoji { font-size: 1.6rem; text-align: center; }
 .task-name { font-weight: 900; }
 .task-time { color: var(--muted); font-size: .84rem; font-weight: 800; }
+.task-steps, .focus-steps { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.task-steps span, .focus-steps div { background: rgba(255,255,255,.78); border: 2px solid rgba(207,227,223,.78); border-radius: 999px; padding: 6px 10px; font-size: .82rem; font-weight: 900; }
 .child-picker { display: flex; gap: 10px; overflow-x: auto; padding: 4px 0 14px; }
 .child-picker button { background: rgba(255,255,255,.82); color: var(--text); border: 2px solid rgba(255,255,255,.88); white-space: nowrap; border-radius: 999px; padding: 12px 16px; box-shadow: 0 6px 16px rgba(28,75,86,.1); }
 .child-picker button.active { border-color: var(--green); color: var(--green); background: rgba(255,255,255,.95); box-shadow: 0 0 0 4px rgba(60,155,109,.16); }
@@ -138,14 +141,26 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .child-name { font-size: clamp(1.2rem, 5vw, 2rem); font-weight: 900; margin-top: 6px; }
 .child-period { color: var(--muted); font-weight: 900; margin-bottom: 16px; }
 .child-stars { display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: rgba(242,188,66,.18); border: 2px solid rgba(242,188,66,.45); color: var(--text); border-radius: 999px; padding: 6px 12px; font-weight: 900; margin-bottom: 12px; }
+.daily-badge { display: inline-flex; align-items: center; justify-content: center; background: rgba(255,255,255,.72); border: 2px solid rgba(255,255,255,.92); border-radius: 999px; padding: 7px 14px; font-weight: 900; margin: 0 0 12px; }
+.daily-badge.complete { background: rgba(242,188,66,.34); border-color: rgba(242,188,66,.72); }
+.mascot-card { display: inline-grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; text-align: left; background: rgba(255,255,255,.72); border: 2px solid rgba(255,255,255,.9); border-radius: 22px; padding: 10px 14px; margin: 0 auto 14px; max-width: 440px; }
+.mascot-emoji { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 18px; background: rgba(255,255,255,.86); font-size: 2.1rem; }
+.mascot-name { font-weight: 900; }
+.mascot-text { color: var(--muted); font-weight: 900; font-size: .9rem; }
 .task-focus { display: grid; gap: 10px; place-items: center; background: rgba(255,255,255,.78); border: 3px solid rgba(255,255,255,.92); border-radius: 28px; padding: clamp(18px, 5vw, 34px); margin-bottom: 14px; box-shadow: inset 0 0 0 4px rgba(255,255,255,.32); }
 .task-focus.waiting { background: linear-gradient(135deg, rgba(255,255,255,.85), rgba(242,188,66,.28), rgba(143,155,255,.25)); }
 .focus-emoji { font-size: clamp(3.4rem, 15vw, 6.8rem); min-width: 112px; min-height: 112px; display: grid; place-items: center; border-radius: 28px; background: radial-gradient(circle at 30% 20%, #fff, rgba(255,255,255,.56)); box-shadow: 0 12px 24px rgba(28,75,86,.12); }
 .focus-name { font-size: clamp(1.4rem, 7vw, 2.6rem); font-weight: 900; }
 .focus-time { color: var(--muted); font-weight: 900; }
+.countdown-pill { background: rgba(60,155,109,.14); color: var(--green); border: 2px solid rgba(60,155,109,.28); border-radius: 999px; padding: 8px 14px; font-weight: 900; }
 .today-list { margin-top: 12px; }
 body.child-theme-active .today-list .task-item { border-radius: 22px; background: rgba(255,255,255,.82); border-color: rgba(255,255,255,.9); }
 body.child-theme-active .primary, body.child-theme-active .secondary { border-radius: 16px; }
+.celebration { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(24,55,58,.18); z-index: 20; padding: 16px; }
+.celebration-card { width: min(420px, 100%); background: rgba(255,255,255,.94); border: 4px solid rgba(242,188,66,.58); border-radius: 30px; box-shadow: 0 22px 60px rgba(28,75,86,.24); text-align: center; padding: 26px; }
+.celebration-emoji { font-size: 5rem; }
+.celebration-title { font-size: 2rem; font-weight: 900; color: var(--accent); }
+.celebration-text { color: var(--muted); font-weight: 900; margin-top: 8px; }
 @media (max-width: 680px) {
   .mom-menu { grid-template-columns: 1fr; }
   .task-form { grid-template-columns: 62px 1fr; }
