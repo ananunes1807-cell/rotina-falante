@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v23';
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -337,6 +337,7 @@ function renderAll(){
   renderTimeSpeechSettings();
   renderMom();
   renderChild();
+  renderAlarmOverlay();
 }
 
 function applyTheme(themeId){
@@ -986,32 +987,58 @@ function isSkipped(child, taskId){
   return !!child.skipped?.[todayKey()]?.[taskId];
 }
 
-function markDone(){
-  const child = childById(selectedChildId);
-  const taskId = $('doneBtn').dataset.task;
-  if(!taskId) return;
+function finishTask(child, taskId, announce=true){
+  if(!child || !taskId) return;
   const task = periods.flatMap(period => child.routines[period.id] || []).find(item => item.id === taskId);
   child.done[todayKey()] ||= {};
   child.done[todayKey()][taskId] = true;
   if(child.skipped?.[todayKey()]) delete child.skipped[todayKey()][taskId];
   child.stars = Number(child.stars || 0) + 1;
-  if(persistentAlarm && persistentAlarm.task.id === taskId) persistentAlarm = null;
+  if(persistentAlarm && persistentAlarm.child.id === child.id && persistentAlarm.task.id === taskId) persistentAlarm = null;
   scheduleSave();
-  showCelebration(child, task);
-  gentleAlarmSpeak(`Muito bem, ${child.name}! Missão concluída. Você ganhou uma estrela.`, child);
-  renderChild();
+  if(announce) {
+    showCelebration(child, task);
+    gentleAlarmSpeak(`Muito bem, ${child.name}! Missão concluída. Você ganhou uma estrela.`, child);
+  }
+  renderAll();
 }
 
-function skipToday(){
+function markDone(){
   const child = childById(selectedChildId);
   const taskId = $('doneBtn').dataset.task;
   if(!taskId) return;
+  finishTask(child, taskId);
+}
+
+function skipTaskToday(child, taskId, announce=true){
+  if(!taskId) return;
   child.skipped[todayKey()] ||= {};
   child.skipped[todayKey()][taskId] = true;
-  if(persistentAlarm && persistentAlarm.task.id === taskId) persistentAlarm = null;
+  if(persistentAlarm && persistentAlarm.child.id === child.id && persistentAlarm.task.id === taskId) persistentAlarm = null;
   scheduleSave();
-  speak(`${child.name}, tarefa pulada só por hoje.`);
+  if(announce) speak(`${child.name}, tarefa pulada só por hoje.`);
   renderAll();
+}
+
+function skipToday(){
+  skipTaskToday(childById(selectedChildId), $('doneBtn').dataset.task);
+}
+
+function finishAlarm(){
+  if(!persistentAlarm) return;
+  finishTask(persistentAlarm.child, persistentAlarm.task.id);
+}
+
+function skipAlarm(){
+  if(!persistentAlarm) return;
+  skipTaskToday(persistentAlarm.child, persistentAlarm.task.id);
+}
+
+function dismissAlarm(){
+  stopSpeaking();
+  persistentAlarm = null;
+  renderAlarmOverlay();
+  renderMomDashboard();
 }
 
 function showCelebration(child, task){
@@ -1058,6 +1085,34 @@ function speakCurrentMission(){
 
 function alarmText(child, period, task){
   return task.message || `${dateSpeech()} ${child.name}, chegou a hora com calma. Sua rotina de agora é ${period.label}. Agora é hora de ${task.name}.`;
+}
+
+function renderAlarmOverlay(){
+  const box = $('alarmOverlay');
+  if(!box) return;
+  if(!persistentAlarm || isDone(persistentAlarm.child, persistentAlarm.task.id) || isSkipped(persistentAlarm.child, persistentAlarm.task.id)){
+    box.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+  const { child, task, period } = persistentAlarm;
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="alarm-card">
+      <div class="alarm-kicker">Alarme tocando</div>
+      <div class="alarm-time">${task.time || 'Agora'}</div>
+      <div class="alarm-profile">${child.avatar} ${escapeHtml(child.name)}</div>
+      <div class="alarm-task">${task.important ? '❗ ' : ''}${task.emoji || '✅'} ${escapeHtml(task.name)}</div>
+      <div class="alarm-period">${period.label}</div>
+      ${task.message ? `<div class="alarm-message">${escapeHtml(task.message)}</div>` : ''}
+      <div class="alarm-actions">
+        <button class="primary" id="alarmDoneBtn">Já fiz</button>
+        <button class="secondary" id="alarmRepeatBtn">🔊 Falar de novo</button>
+        <button class="secondary" id="alarmSkipBtn">Pular hoje</button>
+        <button class="secondary danger" id="alarmDismissBtn">Desligar</button>
+      </div>
+    </div>
+  `;
 }
 
 function testFullAlarm(childId, periodId, taskId){
@@ -1185,6 +1240,7 @@ function tick(){
 
 function checkTaskAlarms(){
   if(persistentAlarm && !isDone(persistentAlarm.child, persistentAlarm.task.id) && !isSkipped(persistentAlarm.child, persistentAlarm.task.id)){
+    renderAlarmOverlay();
     const now = Date.now();
     if(!persistentAlarm.lastReminderAt || now - persistentAlarm.lastReminderAt > 90000){
       persistentAlarm.lastReminderAt = now;
@@ -1192,7 +1248,10 @@ function checkTaskAlarms(){
     }
     return;
   }
-  if(persistentAlarm && (isDone(persistentAlarm.child, persistentAlarm.task.id) || isSkipped(persistentAlarm.child, persistentAlarm.task.id))) persistentAlarm = null;
+  if(persistentAlarm && (isDone(persistentAlarm.child, persistentAlarm.task.id) || isSkipped(persistentAlarm.child, persistentAlarm.task.id))) {
+    persistentAlarm = null;
+    renderAlarmOverlay();
+  }
   const now = new Date();
   const today = now.getDay();
   const current = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -1212,6 +1271,7 @@ function checkTaskAlarms(){
           localStorage.setItem('rf_mode', mode);
           renderAll();
         }
+        renderAlarmOverlay();
         gentleAlarmSpeak(alarmText(child, period, task), child);
       });
     });
@@ -1276,6 +1336,10 @@ document.addEventListener('click', (event) => {
   if(target.id === 'stopSpeechBtn') return run(stopSpeaking);
   if(target.id === 'fullscreenBtn') return run(enterFullscreen);
   if(target.id === 'helpBtn') return run(askForHelp);
+  if(target.id === 'alarmDoneBtn') return run(finishAlarm);
+  if(target.id === 'alarmSkipBtn') return run(skipAlarm);
+  if(target.id === 'alarmDismissBtn') return run(dismissAlarm);
+  if(target.id === 'alarmRepeatBtn') return run(() => persistentAlarm && gentleAlarmSpeak(alarmText(persistentAlarm.child, persistentAlarm.period, persistentAlarm.task), persistentAlarm.child));
   if(target.id === 'speakTimeBtn' || target.id === 'speakTimeBigBtn' || target.id === 'childSpeakTimeBtn') return run(speakTime);
   if(target.dataset.speakTask) return run(() => speakTask(childById(selectedChildId), target.dataset.speakTask));
   if(target.dataset.speakAgendaTask){
