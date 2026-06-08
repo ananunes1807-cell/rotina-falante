@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v27';
+const APP_VERSION = 'v28';
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_X3H6TE',
   authDomain: 'rotina-falante.firebaseapp.com',
@@ -257,6 +257,12 @@ function setStatus(text, ok=false){
   $('syncStatus').style.color = ok ? 'var(--green)' : 'var(--muted)';
 }
 
+function googleErrorText(error){
+  const code = error?.code || 'sem-codigo';
+  const message = error?.message ? ` - ${String(error.message).slice(0, 90)}` : '';
+  return `Erro Google: ${code}${message}`;
+}
+
 function firebaseConfigText(){
   const raw = ($('firebaseConfig').value || '').trim();
   if(!raw || raw.includes('"..."') || raw.includes(":'...'") || raw.includes('alarme-falado')) {
@@ -307,7 +313,7 @@ function initFirebaseFromForm(){
         listenToRemote(doc(db, 'usuarios', authUser.uid, 'plataforma', 'principal'), `Conectado com Google: ${authUser.email || authUser.displayName || 'conta Google'}`);
       }
     }).catch((e) => {
-      if(e?.code) setStatus(`Erro Google: ${e.code}`);
+      setStatus(googleErrorText(e));
     });
   }
   return cfgText;
@@ -371,7 +377,7 @@ async function loginGoogle(){
     localStorage.setItem('rf_authMode', 'google');
     listenToRemote(doc(db, 'usuarios', authUser.uid, 'plataforma', 'principal'), `Conectado com Google: ${authUser.email || authUser.displayName || 'conta Google'}`);
   }catch(e){
-    setStatus('Não consegui entrar com Google. Confira FirebaseConfig e domínio autorizado.');
+    setStatus(googleErrorText(e));
   }
 }
 
