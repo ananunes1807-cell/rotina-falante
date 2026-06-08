@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_X3H6TE',
   authDomain: 'rotina-falante.firebaseapp.com',
@@ -122,6 +122,7 @@ let firebaseApp = null;
 let db = null;
 let auth = null;
 let authUser = null;
+let authPersistenceReady = Promise.resolve();
 let remoteRef = null;
 let unsub = null;
 let saveTimer = null;
@@ -288,7 +289,9 @@ function initFirebaseFromForm(){
   db ||= getFirestore(firebaseApp);
   if(!auth){
     auth = getAuth(firebaseApp);
-    setPersistence(auth, browserLocalPersistence).catch(()=>{});
+    authPersistenceReady = setPersistence(auth, browserLocalPersistence).catch((e) => {
+      setStatus(`Erro Google: ${e.code || 'persistencia'}`);
+    });
     onAuthStateChanged(auth, (user) => {
       authUser = user;
       renderAuthBar();
@@ -297,7 +300,7 @@ function initFirebaseFromForm(){
         listenToRemote(doc(db, 'usuarios', user.uid, 'plataforma', 'principal'), `Conectado com Google: ${user.email || user.displayName || 'conta Google'}`);
       }
     });
-    getRedirectResult(auth).then((result) => {
+    authPersistenceReady.then(() => getRedirectResult(auth)).then((result) => {
       if(result?.user && db){
         authUser = result.user;
         localStorage.setItem('rf_authMode', 'google');
@@ -348,9 +351,15 @@ async function connectFirebase(){
 async function loginGoogle(){
   try{
     initFirebaseFromForm();
+    await authPersistenceReady;
     localStorage.setItem('rf_authMode', 'google');
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
+    const isMobile = matchMedia('(max-width: 780px)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if(isMobile){
+      await signInWithRedirect(auth, provider);
+      return;
+    }
     try{
       await signInWithPopup(auth, provider);
     }catch(e){
