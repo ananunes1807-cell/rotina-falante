@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v25';
+const APP_VERSION = 'v26';
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_X3H6TE',
   authDomain: 'rotina-falante.firebaseapp.com',
@@ -292,11 +292,20 @@ function initFirebaseFromForm(){
     onAuthStateChanged(auth, (user) => {
       authUser = user;
       renderAuthBar();
-      if(user && localStorage.getItem('rf_authMode') === 'google' && db){
+      if(user && db){
+        localStorage.setItem('rf_authMode', 'google');
         listenToRemote(doc(db, 'usuarios', user.uid, 'plataforma', 'principal'), `Conectado com Google: ${user.email || user.displayName || 'conta Google'}`);
       }
     });
-    getRedirectResult(auth).catch(()=>{});
+    getRedirectResult(auth).then((result) => {
+      if(result?.user && db){
+        authUser = result.user;
+        localStorage.setItem('rf_authMode', 'google');
+        listenToRemote(doc(db, 'usuarios', authUser.uid, 'plataforma', 'principal'), `Conectado com Google: ${authUser.email || authUser.displayName || 'conta Google'}`);
+      }
+    }).catch((e) => {
+      if(e?.code) setStatus(`Erro Google: ${e.code}`);
+    });
   }
   return cfgText;
 }
@@ -339,6 +348,7 @@ async function connectFirebase(){
 async function loginGoogle(){
   try{
     initFirebaseFromForm();
+    localStorage.setItem('rf_authMode', 'google');
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     try{
