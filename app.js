@@ -1,8 +1,9 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
 import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -108,7 +109,10 @@ const defaultConfigText = localStorage.getItem('rf_firebaseConfig') || '';
 let familyCode = localStorage.getItem('rf_familyCode') || '';
 let momPin = localStorage.getItem('rf_momPin') || '1234';
 let appState = loadLocalState();
+let firebaseApp = null;
 let db = null;
+let auth = null;
+let authUser = null;
 let remoteRef = null;
 let unsub = null;
 let saveTimer = null;
@@ -256,41 +260,96 @@ function parseFirebaseConfig(text){
   return Function('"use strict";return (' + match[0] + ');')();
 }
 
+function initFirebaseFromForm(){
+  const cfgText = $('firebaseConfig').value.trim();
+  const firebaseConfig = parseFirebaseConfig(cfgText);
+  localStorage.setItem('rf_firebaseConfig', cfgText);
+  momPin = ($('momPin').value || '1234').trim();
+  localStorage.setItem('rf_momPin', momPin);
+  if(!firebaseApp) firebaseApp = initializeApp(firebaseConfig);
+  db ||= getFirestore(firebaseApp);
+  if(!auth){
+    auth = getAuth(firebaseApp);
+    setPersistence(auth, browserLocalPersistence).catch(()=>{});
+    onAuthStateChanged(auth, (user) => {
+      authUser = user;
+      renderAuthBar();
+      if(user && localStorage.getItem('rf_authMode') === 'google' && db){
+        listenToRemote(doc(db, 'usuarios', user.uid, 'plataforma', 'principal'), `Conectado com Google: ${user.email || user.displayName || 'conta Google'}`);
+      }
+    });
+    getRedirectResult(auth).catch(()=>{});
+  }
+  return cfgText;
+}
+
+function listenToRemote(ref, label){
+  remoteRef = ref;
+  if(unsub) unsub();
+  unsub = onSnapshot(remoteRef, (snap) => {
+    if(!snap.exists()){
+      pushState();
+      return;
+    }
+    const data = snap.data();
+    if(data.state){
+      applyingRemote = true;
+      appState = normalizeState(data.state);
+      saveLocal();
+      applyingRemote = false;
+      renderAll();
+    }
+    setStatus(label, true);
+  }, () => setStatus('Sem permissão no Firestore'));
+  $('setupPanel').hidden = true;
+  $('modePanel').hidden = false;
+  renderAll();
+}
+
 async function connectFirebase(){
   try{
-    const cfgText = $('firebaseConfig').value.trim();
+    initFirebaseFromForm();
     familyCode = cleanFamilyCode($('familyCode').value);
-    momPin = ($('momPin').value || '1234').trim();
     if(!familyCode) throw new Error('family');
-    const firebaseConfig = parseFirebaseConfig(cfgText);
-    localStorage.setItem('rf_firebaseConfig', cfgText);
     localStorage.setItem('rf_familyCode', familyCode);
-    localStorage.setItem('rf_momPin', momPin);
-    const app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
-    remoteRef = doc(db, 'familias', familyCode, 'plataforma', 'principal');
-    if(unsub) unsub();
-    unsub = onSnapshot(remoteRef, (snap) => {
-      if(!snap.exists()){
-        pushState();
-        return;
-      }
-      const data = snap.data();
-      if(data.state){
-        applyingRemote = true;
-        appState = normalizeState(data.state);
-        saveLocal();
-        applyingRemote = false;
-        renderAll();
-      }
-      setStatus('Conectado ao Firestore', true);
-    }, () => setStatus('Sem permissão no Firestore'));
-    $('setupPanel').hidden = true;
-    $('modePanel').hidden = false;
-    renderAll();
+    listenToRemote(doc(db, 'familias', familyCode, 'plataforma', 'principal'), 'Conectado ao Firestore');
   }catch(e){
     setStatus('Confira firebaseConfig, código e regras');
   }
+}
+
+async function loginGoogle(){
+  try{
+    initFirebaseFromForm();
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    try{
+      await signInWithPopup(auth, provider);
+    }catch(e){
+      await signInWithRedirect(auth, provider);
+      return;
+    }
+    authUser = auth.currentUser;
+    if(!authUser) throw new Error('auth');
+    localStorage.setItem('rf_authMode', 'google');
+    listenToRemote(doc(db, 'usuarios', authUser.uid, 'plataforma', 'principal'), `Conectado com Google: ${authUser.email || authUser.displayName || 'conta Google'}`);
+  }catch(e){
+    setStatus('Não consegui entrar com Google. Confira FirebaseConfig e domínio autorizado.');
+  }
+}
+
+async function logoutGoogle(){
+  if(auth) await signOut(auth).catch(()=>{});
+  authUser = null;
+  localStorage.removeItem('rf_authMode');
+  renderAuthBar();
+  location.reload();
+}
+
+function renderAuthBar(){
+  if(!$('authBar')) return;
+  $('authBar').hidden = !authUser;
+  if(authUser) $('authUserLabel').textContent = `Google: ${authUser.email || authUser.displayName || 'conectado'}`;
 }
 
 function cleanFamilyCode(code){
@@ -1305,6 +1364,7 @@ function addChild(){
 function clearConfig(){
   localStorage.removeItem('rf_firebaseConfig');
   localStorage.removeItem('rf_familyCode');
+  localStorage.removeItem('rf_authMode');
   location.reload();
 }
 
@@ -1312,6 +1372,8 @@ $('firebaseConfig').value = defaultConfigText;
 $('familyCode').value = familyCode;
 $('momPin').value = momPin;
 $('connectBtn').addEventListener('click', connectFirebase);
+$('googleLoginBtn').addEventListener('click', loginGoogle);
+$('logoutBtn').addEventListener('click', logoutGoogle);
 $('clearConfigBtn').addEventListener('click', clearConfig);
 $('addChildBtn').addEventListener('click', addChild);
 $('closeEditorBtn').addEventListener('click', () => { editingChildId = ''; $('routineEditor').hidden = true; });
@@ -1366,7 +1428,9 @@ setInterval(tick, 1000);
 setInterval(checkTaskAlarms, 30000);
 tick();
 startTimeAnnouncer();
-if(defaultConfigText && familyCode) connectFirebase();
+if(defaultConfigText && localStorage.getItem('rf_authMode') === 'google') {
+  try { initFirebaseFromForm(); } catch(e) { renderAll(); }
+} else if(defaultConfigText && familyCode) connectFirebase();
 else renderAll();
 if('serviceWorker' in navigator){
   let refreshing = false;
