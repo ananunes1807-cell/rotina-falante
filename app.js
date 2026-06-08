@@ -3,7 +3,16 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v24';
+const APP_VERSION = 'v25';
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_X3H6TE',
+  authDomain: 'rotina-falante.firebaseapp.com',
+  projectId: 'rotina-falante',
+  storageBucket: 'rotina-falante.firebasestorage.app',
+  messagingSenderId: '800689968868',
+  appId: '1:800689968868:web:6c076be1b02e5357783ef1',
+  measurementId: 'G-9YW15GBDFB'
+};
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -105,7 +114,7 @@ const routineTemplates = [
     }
   }
 ];
-const defaultConfigText = localStorage.getItem('rf_firebaseConfig') || '';
+const defaultConfigText = localStorage.getItem('rf_firebaseConfig') || JSON.stringify(DEFAULT_FIREBASE_CONFIG, null, 2);
 let familyCode = localStorage.getItem('rf_familyCode') || '';
 let momPin = localStorage.getItem('rf_momPin') || '1234';
 let appState = loadLocalState();
@@ -247,6 +256,14 @@ function setStatus(text, ok=false){
   $('syncStatus').style.color = ok ? 'var(--green)' : 'var(--muted)';
 }
 
+function firebaseConfigText(){
+  const raw = ($('firebaseConfig').value || '').trim();
+  if(!raw || raw.includes('"..."') || raw.includes(":'...'") || raw.includes('alarme-falado')) {
+    return JSON.stringify(DEFAULT_FIREBASE_CONFIG, null, 2);
+  }
+  return raw;
+}
+
 function parseFirebaseConfig(text){
   let raw = text.trim();
   if(!raw) throw new Error('config');
@@ -261,7 +278,8 @@ function parseFirebaseConfig(text){
 }
 
 function initFirebaseFromForm(){
-  const cfgText = $('firebaseConfig').value.trim();
+  const cfgText = firebaseConfigText();
+  $('firebaseConfig').value = cfgText;
   const firebaseConfig = parseFirebaseConfig(cfgText);
   localStorage.setItem('rf_firebaseConfig', cfgText);
   momPin = ($('momPin').value || '1234').trim();
