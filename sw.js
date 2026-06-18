@@ -1,9 +1,9 @@
-const CACHE_NAME = 'rotina-falante-nova-v31';
+const CACHE_NAME = 'rotina-falante-nova-v32';
 const FILES = [
   './index.html',
-  './styles.css?v=31',
-  './app.js?v=31',
-  './manifest.webmanifest?v=31',
+  './styles.css?v=32',
+  './app.js?v=32',
+  './manifest.webmanifest?v=32',
   './icon-192.png',
   './icon-512.png'
 ];

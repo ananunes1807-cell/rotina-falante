@@ -3,8 +3,17 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v31';
+const APP_VERSION = 'v32';
 const DEFAULT_FAMILY_CODE = 'familia-ana';
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_x3H6TE',
+  authDomain: 'rotina-falante.firebaseapp.com',
+  projectId: 'rotina-falante',
+  storageBucket: 'rotina-falante.firebasestorage.app',
+  messagingSenderId: '800689968868',
+  appId: '1:800689968868:web:6c076be1b02e5357783ef1',
+  measurementId: 'G-9YW15GBDFB'
+};
 const RESPONSIBLE_EMAILS = [
   'anacarolinamoraisdosreis@gmail.com',
   'carlionison.43@gmail.com'
@@ -112,7 +121,8 @@ const routineTemplates = [
 ];
 const savedConfigText = localStorage.getItem('rf_firebaseConfig') || '';
 const badEmbeddedApiKey = 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_X3H6TE';
-const defaultConfigText = savedConfigText.includes(badEmbeddedApiKey) ? '' : savedConfigText;
+const embeddedConfigText = JSON.stringify(DEFAULT_FIREBASE_CONFIG, null, 2);
+const defaultConfigText = savedConfigText && !savedConfigText.includes(badEmbeddedApiKey) ? savedConfigText : embeddedConfigText;
 let familyCode = localStorage.getItem('rf_familyCode') || DEFAULT_FAMILY_CODE;
 let momPin = localStorage.getItem('rf_momPin') || '1234';
 let appState = loadLocalState();
