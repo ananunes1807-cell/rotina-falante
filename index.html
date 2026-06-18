@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#3d7f91">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Rotina Falante">
-  <link rel="manifest" href="./manifest.webmanifest?v=32">
+  <link rel="manifest" href="./manifest.webmanifest?v=33">
   <link rel="icon" href="./icon-192.png">
   <title>Rotina Falante</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=32">
+  <link rel="stylesheet" href="./styles.css?v=33">
 </head>
 <body>
   <div class="app-shell">
@@ -140,6 +140,18 @@
             </div>
             <div id="inviteList"></div>
           </div>
+          <div class="protected-box">
+            <div>
+              <div class="section-title">Modo criança protegido</div>
+              <p class="muted">Escolha uma criança e trave a tela infantil. Para sair, precisa da senha do modo família.</p>
+            </div>
+            <div class="protected-form">
+              <select id="protectedChildSelect"></select>
+              <button class="primary" id="enableProtectedBtn">Ativar protegido</button>
+              <button class="secondary" id="disableProtectedBtn">Desativar</button>
+            </div>
+            <div class="protected-status" id="protectedStatus">Proteção desligada.</div>
+          </div>
         </section>
 
         <div class="settings-strip">
@@ -217,6 +229,7 @@
             <button class="secondary" id="stopSpeechBtn">⏸ Parar som</button>
             <button class="secondary" id="fullscreenBtn">Tela cheia</button>
             <button class="secondary" id="helpBtn">Preciso de ajuda</button>
+            <button class="secondary danger protected-exit-btn" id="unlockProtectedBtn" hidden>🔒 Sair protegido</button>
           </div>
         </div>
         <div class="celebration" id="celebration" hidden></div>
@@ -226,6 +239,6 @@
     <div class="alarm-overlay" id="alarmOverlay" hidden></div>
   </div>
 
-  <script type="module" src="./app.js?v=32"></script>
+  <script type="module" src="./app.js?v=33"></script>
 </body>
 </html>

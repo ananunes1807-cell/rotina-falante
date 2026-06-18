@@ -111,6 +111,11 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .invite-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 2px solid var(--line); border-radius: 14px; background: #f7fbfb; padding: 10px; margin-top: 8px; }
 .invite-item.accepted { border-color: rgba(60,155,109,.45); background: rgba(60,155,109,.09); }
 .invite-item.declined { opacity: .72; }
+.protected-box { display: grid; gap: 10px; border-top: 2px solid var(--line); padding-top: 12px; margin-top: 12px; }
+.protected-form { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; gap: 8px; align-items: center; }
+.protected-status, .protected-child-label { border: 2px solid rgba(60,155,109,.35); background: rgba(60,155,109,.1); color: var(--green); border-radius: 14px; padding: 10px 12px; font-weight: 900; }
+.protected-child-label { display: inline-flex; align-items: center; justify-content: center; width: 100%; }
+.mode-panel.protected-active .segmented { opacity: .78; }
 .children-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 12px 0 16px; }
 .profile-tile { min-height: 160px; background: var(--tile-profile-bg, var(--surface)); color: var(--text); border: 2px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); display: grid; place-items: center; gap: 5px; padding: 18px 12px; text-align: center; position: relative; overflow: hidden; }
 .profile-tile::after { content: '✦ ✿ ☁'; position: absolute; inset: auto 10px 6px auto; opacity: .18; font-size: 2.4rem; pointer-events: none; }
@@ -180,6 +185,7 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .task-steps, .focus-steps { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .task-steps span, .focus-steps div { background: rgba(255,255,255,.78); border: 2px solid rgba(207,227,223,.78); border-radius: 999px; padding: 6px 10px; font-size: .82rem; font-weight: 900; }
 .child-picker { display: flex; gap: 10px; overflow-x: auto; padding: 2px 0 8px; }
+.child-picker.protected-picker { overflow: visible; }
 .child-picker button { background: rgba(255,255,255,.82); color: var(--text); border: 2px solid rgba(255,255,255,.88); white-space: nowrap; border-radius: 999px; padding: 10px 14px; box-shadow: 0 6px 16px rgba(28,75,86,.1); }
 .child-picker button.active { border-color: var(--green); color: var(--green); background: rgba(255,255,255,.95); box-shadow: 0 0 0 4px rgba(60,155,109,.16); }
 .child-board { text-align: center; background: var(--child-profile-bg); backdrop-filter: blur(2px); border-radius: 26px; border: 3px solid rgba(255,255,255,.72); padding: clamp(12px, 2.4vw, 20px); position: relative; overflow: hidden; }
@@ -229,7 +235,7 @@ body.child-theme-active .primary, body.child-theme-active .secondary { border-ra
 .danger { color: var(--red); border-color: rgba(216,85,85,.35); }
 @media (max-width: 680px) {
   .mom-menu { grid-template-columns: 1fr; }
-  .mom-dashboard, .mom-tools, .copy-grid, .invite-form, .invite-item { grid-template-columns: 1fr; }
+  .mom-dashboard, .mom-tools, .copy-grid, .invite-form, .invite-item, .protected-form { grid-template-columns: 1fr; }
   .agenda-row { grid-template-columns: 70px minmax(0, 1fr); }
   .agenda-row button { width: 100%; }
   .task-form { grid-template-columns: 62px 1fr; }

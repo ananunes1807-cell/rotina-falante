@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v32';
+const APP_VERSION = 'v33';
 const DEFAULT_FAMILY_CODE = 'familia-ana';
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_x3H6TE',
@@ -191,6 +191,9 @@ function normalizeState(state){
   }));
   state.family.changes = Array.isArray(state.family.changes) ? state.family.changes.slice(-12) : [];
   state.family.invites = Array.isArray(state.family.invites) ? state.family.invites.slice(-12) : [];
+  state.childProtection ||= { enabled: false, childId: '' };
+  state.childProtection.enabled = !!state.childProtection.enabled;
+  state.childProtection.childId ||= '';
   state.children = Array.isArray(state.children) ? state.children : [];
   if(!state.children.length) state.children.push({ id: crypto.randomUUID(), type:'child', name:'Criança', birthDate:'', avatar:'⭐', profileTheme:'bichinhos', routines: emptyRoutines(), done:{} });
   if(!state.children.some(child => child.type === 'mom')) state.children.push({ id: crypto.randomUUID(), type:'mom', name:'Responsável', birthDate:'', avatar:'☕', profileTheme:'mae', routines: emptyRoutines(), done:{} });
@@ -485,6 +488,15 @@ function childProfiles(){
   return appState.children.filter(child => child.type !== 'mom');
 }
 
+function isChildProtectionOn(){
+  return !!appState.childProtection?.enabled;
+}
+
+function protectedChild(){
+  const children = childProfiles();
+  return children.find(child => child.id === appState.childProtection?.childId) || children[0] || null;
+}
+
 function momProfile(){
   let profile = appState.children.find(child => child.type === 'mom');
   if(!profile){
@@ -537,9 +549,11 @@ function renderThemes(){
 }
 
 function renderMode(){
+  const protectedOn = isChildProtectionOn();
   document.querySelectorAll('.segmented button').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
   $('momView').hidden = mode !== 'mom';
   $('childView').hidden = mode !== 'child';
+  $('modePanel').classList.toggle('protected-active', protectedOn && mode === 'child');
   if(mode !== 'child') applyChildPageTheme(null);
 }
 
@@ -694,7 +708,24 @@ function renderFamilyPanel(){
     .map(email => `<option value="${email}">${escapeHtml(responsibleNameFromEmail(email))}</option>`)
     .join('');
   $('inviteRoutine').innerHTML = appState.children.map(child => `<option value="${child.id}">${child.avatar} ${escapeHtml(child.name)}</option>`).join('');
+  renderProtectedControl();
   renderInviteList();
+}
+
+function renderProtectedControl(){
+  if(!$('protectedChildSelect')) return;
+  const children = childProfiles();
+  const protectedProfile = protectedChild();
+  $('protectedChildSelect').innerHTML = children.length
+    ? children.map(child => `<option value="${child.id}">${child.avatar} ${escapeHtml(child.name)}</option>`).join('')
+    : '<option value="">Nenhuma criança cadastrada</option>';
+  $('protectedChildSelect').value = protectedProfile?.id || '';
+  const active = isChildProtectionOn();
+  $('enableProtectedBtn').disabled = !children.length || active;
+  $('disableProtectedBtn').disabled = !active;
+  $('protectedStatus').textContent = active && protectedProfile
+    ? `Protegido para ${protectedProfile.avatar} ${protectedProfile.name}. Para sair, use a senha do modo família.`
+    : 'Proteção desligada.';
 }
 
 function renderInviteList(){
@@ -1080,15 +1111,21 @@ function editAgendaProfile(id){
 
 function renderChild(){
   if(!$('childPicker') || !$('taskFocus') || !$('todayList')) return;
-  const visibleChildren = childProfiles();
+  const protectedOn = isChildProtectionOn();
+  const lockedChild = protectedChild();
+  const visibleChildren = protectedOn && lockedChild ? [lockedChild] : childProfiles();
   if(!selectedChildId || !visibleChildren.some(child => child.id === selectedChildId)) selectedChildId = visibleChildren[0]?.id || appState.children[0].id;
   localStorage.setItem('rf_selectedChild', selectedChildId);
   const child = childById(selectedChildId);
   const visual = profileThemeById(child.profileTheme);
   const mascot = mascotByTheme(child.profileTheme);
   applyChildPageTheme(child);
-  $('childPicker').innerHTML = visibleChildren.map(c => `<button class="${c.id===selectedChildId?'active':''}" data-pick-child="${c.id}">${c.avatar} ${c.name}</button>`).join('');
-  document.querySelectorAll('[data-pick-child]').forEach(btn => btn.addEventListener('click', () => { selectedChildId = btn.dataset.pickChild; renderChild(); }));
+  $('childPicker').classList.toggle('protected-picker', protectedOn);
+  $('childPicker').innerHTML = protectedOn
+    ? `<div class="protected-child-label">🔒 Modo protegido: ${child.avatar} ${escapeHtml(child.name)}</div>`
+    : visibleChildren.map(c => `<button class="${c.id===selectedChildId?'active':''}" data-pick-child="${c.id}">${c.avatar} ${c.name}</button>`).join('');
+  if(!protectedOn) document.querySelectorAll('[data-pick-child]').forEach(btn => btn.addEventListener('click', () => { selectedChildId = btn.dataset.pickChild; renderChild(); }));
+  if($('unlockProtectedBtn')) $('unlockProtectedBtn').hidden = !protectedOn;
   const age = childAge(child);
   $('childName').textContent = `${child.avatar} ${child.name}${age !== '' ? ' · ' + age + ' anos' : ''}`;
   $('childStars').textContent = `⭐ ${child.stars || 0}`;
@@ -1522,7 +1559,9 @@ function checkTaskAlarms(){
   const now = new Date();
   const today = now.getDay();
   const current = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const lockedChild = isChildProtectionOn() ? protectedChild() : null;
   appState.children.forEach(child => {
+    if(lockedChild && child.id !== lockedChild.id) return;
     periods.forEach(period => {
       (child.routines[period.id] || []).forEach(task => {
         if(!task.time || task.time !== current) return;
@@ -1575,6 +1614,34 @@ function addChild(){
   renderAll();
 }
 
+function askFamilyPin(){
+  const pin = prompt('Senha do modo família:');
+  return pin === momPin;
+}
+
+function enableProtectedChildMode(){
+  const childId = $('protectedChildSelect')?.value || childProfiles()[0]?.id || '';
+  const child = childById(childId);
+  if(!child || child.type === 'mom') return;
+  appState.childProtection = { enabled: true, childId: child.id };
+  selectedChildId = child.id;
+  mode = 'child';
+  localStorage.setItem('rf_selectedChild', selectedChildId);
+  localStorage.setItem('rf_mode', mode);
+  scheduleSave(`ativou o modo criança protegido para ${child.name}`);
+  renderAll();
+}
+
+function disableProtectedChildMode(requirePin=true){
+  if(requirePin && !askFamilyPin()) return;
+  const child = protectedChild();
+  appState.childProtection = { enabled: false, childId: child?.id || '' };
+  mode = 'mom';
+  localStorage.setItem('rf_mode', mode);
+  scheduleSave(child ? `desativou o modo criança protegido de ${child.name}` : 'desativou o modo criança protegido');
+  renderAll();
+}
+
 function clearConfig(){
   localStorage.removeItem('rf_firebaseConfig');
   localStorage.removeItem('rf_familyCode');
@@ -1610,6 +1677,9 @@ document.addEventListener('click', (event) => {
   if(target.id === 'speakMomTodayBtn') return run(speakMomToday);
   if(target.id === 'copyRoutineBtn') return run(copyRoutine);
   if(target.id === 'sendInviteBtn') return run(sendInvite);
+  if(target.id === 'enableProtectedBtn') return run(enableProtectedChildMode);
+  if(target.id === 'disableProtectedBtn') return run(() => disableProtectedChildMode(true));
+  if(target.id === 'unlockProtectedBtn') return run(() => disableProtectedChildMode(true));
   if(target.id === 'stopSpeechBtn') return run(stopSpeaking);
   if(target.id === 'fullscreenBtn') return run(enterFullscreen);
   if(target.id === 'helpBtn') return run(askForHelp);
@@ -1633,9 +1703,9 @@ document.addEventListener('click', (event) => {
   if(target.dataset.template) return run(() => applyTemplate(target.dataset.template));
 });
 function switchMode(nextMode){
+  if(isChildProtectionOn() && nextMode === 'mom') return disableProtectedChildMode(true);
   if(mode === 'child' && nextMode === 'mom'){
-    const pin = prompt('Senha do modo família:');
-    if(pin !== momPin) return;
+    if(!askFamilyPin()) return;
   }
   mode = nextMode;
   localStorage.setItem('rf_mode', mode);
