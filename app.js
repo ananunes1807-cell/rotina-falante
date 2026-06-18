@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -25,7 +25,7 @@ const profileThemes = [
   { id:'dinossauro', label:'Mundo dino', emoji:'🦕', bg:'linear-gradient(135deg,#d8f5c8,#7ed957)' },
   { id:'princesa', label:'Jardim mágico', emoji:'🌸', bg:'linear-gradient(135deg,#ffe1f1,#ffc6df)' },
   { id:'espaco', label:'Espaço estelar', emoji:'🚀', bg:'linear-gradient(135deg,#202955,#6877ff)' },
-  { id:'mae', label:'Cantinho da mãe', emoji:'☕', bg:'linear-gradient(135deg,#f2e8ff,#d8c7ff)' },
+  { id:'mae', label:'Cantinho da família', emoji:'☕', bg:'linear-gradient(135deg,#f2e8ff,#d8c7ff)' },
 ];
 const soundOptions = [
   { id:'suave', label:'Sininho suave', emoji:'🔔' },
@@ -40,7 +40,7 @@ const mascots = {
   dinossauro: { emoji:'🦕', name:'Dino Guia', wait:'O Dino está descansando até a próxima missão.' },
   princesa: { emoji:'🌸', name:'Flor Mágica', wait:'A flor está brilhando enquanto esperamos.' },
   espaco: { emoji:'🚀', name:'Foguetinho', wait:'O foguete está em órbita até a próxima missão.' },
-  mae: { emoji:'☕', name:'Lembrete da mãe', wait:'Seu cantinho está em espera.' },
+  mae: { emoji:'☕', name:'Lembrete da família', wait:'O cantinho da família está em espera.' },
 };
 const routineTemplates = [
   {
@@ -144,7 +144,7 @@ function loadLocalState(){
     theme: 'ceu',
     children: [
       { id: crypto.randomUUID(), type:'child', name: 'Criança', birthDate: '', avatar: '⭐', profileTheme:'bichinhos', routines: emptyRoutines(), done: {} },
-      { id: crypto.randomUUID(), type:'mom', name: 'Mãe', birthDate: '', avatar: '☕', profileTheme:'mae', routines: emptyRoutines(), done: {} }
+      { id: crypto.randomUUID(), type:'mom', name: 'Responsável', birthDate: '', avatar: '☕', profileTheme:'mae', routines: emptyRoutines(), done: {} }
     ],
     updatedAtLocal: new Date().toISOString()
   });
@@ -169,11 +169,11 @@ function normalizeState(state){
   state.theme ||= 'ceu';
   state.children = Array.isArray(state.children) ? state.children : [];
   if(!state.children.length) state.children.push({ id: crypto.randomUUID(), type:'child', name:'Criança', birthDate:'', avatar:'⭐', profileTheme:'bichinhos', routines: emptyRoutines(), done:{} });
-  if(!state.children.some(child => child.type === 'mom')) state.children.push({ id: crypto.randomUUID(), type:'mom', name:'Mãe', birthDate:'', avatar:'☕', profileTheme:'mae', routines: emptyRoutines(), done:{} });
+  if(!state.children.some(child => child.type === 'mom')) state.children.push({ id: crypto.randomUUID(), type:'mom', name:'Responsável', birthDate:'', avatar:'☕', profileTheme:'mae', routines: emptyRoutines(), done:{} });
   state.children.forEach(child => {
     child.id ||= crypto.randomUUID();
     child.name ||= 'Criança';
-    child.type ||= child.name.toLowerCase().includes('mãe') || child.name.toLowerCase().includes('mae') ? 'mom' : 'child';
+    child.type ||= child.name.toLowerCase().includes('mãe') || child.name.toLowerCase().includes('mae') || child.name.toLowerCase().includes('responsável') || child.name.toLowerCase().includes('responsavel') ? 'mom' : 'child';
     child.birthDate ||= '';
     child.manualAge = child.manualAge ?? child.age ?? '';
     delete child.age;
@@ -401,7 +401,7 @@ function childProfiles(){
 function momProfile(){
   let profile = appState.children.find(child => child.type === 'mom');
   if(!profile){
-    profile = { id: crypto.randomUUID(), type:'mom', name:'Mãe', birthDate:'', avatar:'☕', profileTheme:'mae', routines: emptyRoutines(), done:{} };
+    profile = { id: crypto.randomUUID(), type:'mom', name:'Responsável', birthDate:'', avatar:'☕', profileTheme:'mae', routines: emptyRoutines(), done:{} };
     appState.children.push(profile);
   }
   return profile;
@@ -460,8 +460,8 @@ function renderMom(){
   const inMomTab = selectedProfileTab === 'mom';
   renderMomDashboard();
   renderMomTools();
-  $('profilesTitle').textContent = inMomTab ? 'Minha rotina' : 'Filhos e rotinas';
-  $('profilesHint').textContent = inMomTab ? 'Edite seu nome, seu emoji e sua rotina separada.' : 'Edite aqui. Os aparelhos das crianças atualizam automaticamente.';
+  $('profilesTitle').textContent = inMomTab ? 'Rotina dos responsáveis' : 'Filhos e rotinas';
+  $('profilesHint').textContent = inMomTab ? 'Edite nome, emoji e alarmes dos responsáveis. Essa rotina toca separada das crianças.' : 'Edite aqui. Os aparelhos das crianças atualizam automaticamente.';
   $('addChildBtn').hidden = inMomTab;
   document.querySelectorAll('[data-profile-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.profileTab === selectedProfileTab);
@@ -477,7 +477,7 @@ function renderMom(){
     <button class="profile-tile ${editingChildId===child.id?'active':''} profile-card-${child.type}" style="--tile-profile-bg:${profileThemeById(child.profileTheme).bg}" data-open-profile="${child.id}">
       <div class="profile-tile-avatar">${child.avatar}</div>
       <div class="profile-tile-name">${child.name}</div>
-      <div class="profile-tile-meta">${child.type === 'mom' ? 'Rotina da mãe' : ageText(child)}</div>
+      <div class="profile-tile-meta">${child.type === 'mom' ? 'Rotina da família' : ageText(child)}</div>
     </button>
   `).join('');
   if(!inMomTab && editingChildId && !visibleProfiles.some(child => child.id === editingChildId)) editingChildId = '';
@@ -583,7 +583,7 @@ function profileDetailHtml(child){
       <div class="avatar">${child.avatar}</div>
       <div>
         <div class="task-name">${child.name}</div>
-        <div class="task-time">${child.type === 'mom' ? 'Rotina da mãe' : ageText(child)} · ⭐ ${child.stars || 0}</div>
+        <div class="task-time">${child.type === 'mom' ? 'Rotina da família' : ageText(child)} · ⭐ ${child.stars || 0}</div>
       </div>
     </div>
     <div class="profile-detail-grid">
@@ -674,7 +674,7 @@ function bindChildCards(){
 
 function updateChild(id, patch){
   const child = childById(id);
-  if(patch.name !== undefined && !patch.name) patch.name = child.type === 'mom' ? 'Mãe' : 'Criança';
+  if(patch.name !== undefined && !patch.name) patch.name = child.type === 'mom' ? 'Responsável' : 'Criança';
   Object.assign(child, patch);
   scheduleSave();
   renderChild();
@@ -1451,7 +1451,7 @@ document.addEventListener('click', (event) => {
 });
 function switchMode(nextMode){
   if(mode === 'child' && nextMode === 'mom'){
-    const pin = prompt('Senha do modo mãe:');
+    const pin = prompt('Senha do modo família:');
     if(pin !== momPin) return;
   }
   mode = nextMode;

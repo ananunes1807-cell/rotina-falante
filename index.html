@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#3d7f91">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Rotina Falante">
-  <link rel="manifest" href="./manifest.webmanifest?v=29">
+  <link rel="manifest" href="./manifest.webmanifest?v=30">
   <link rel="icon" href="./icon-192.png">
   <title>Rotina Falante</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=29">
+  <link rel="stylesheet" href="./styles.css?v=30">
 </head>
 <body>
   <div class="app-shell">
@@ -36,19 +36,19 @@
         <textarea id="firebaseConfig" spellcheck="false" placeholder='{"apiKey":"...","authDomain":"...","projectId":"alarme-falado","appId":"..."}'></textarea>
         <label>Código da família</label>
         <input id="familyCode" placeholder="familia-ana">
-        <label>Senha do modo mãe</label>
+        <label>Senha do modo família</label>
         <input id="momPin" inputmode="numeric" maxlength="8" placeholder="1234">
         <div class="setup-actions">
           <button class="primary" id="connectBtn">Conectar Firestore</button>
           <button class="primary" id="googleLoginBtn">Entrar com Google</button>
           <button class="secondary" id="clearConfigBtn">Limpar</button>
         </div>
-        <p class="muted auth-hint" id="authHint">Google usa sua conta para carregar a mesma rotina em outro celular ou computador.</p>
+        <p class="muted auth-hint" id="authHint">Google usa sua conta para carregar a mesma rotina em outro celular ou computador. Para compartilhar, outro responsável entra com a mesma conta ou com uma conta liberada depois.</p>
       </section>
 
       <section class="mode-panel" id="modePanel" hidden>
         <div class="segmented">
-          <button class="active" data-mode="mom">Modo mãe</button>
+          <button class="active" data-mode="mom">Modo família</button>
           <button data-mode="child">Modo criança</button>
         </div>
         <div class="auth-bar" id="authBar" hidden>
@@ -134,7 +134,7 @@
         </div>
         <div class="profile-tabs">
           <button class="active" data-profile-tab="children">Crianças</button>
-          <button data-profile-tab="mom">Mãe</button>
+          <button data-profile-tab="mom">Responsáveis</button>
         </div>
         <div class="children-grid" id="childrenGrid"></div>
 
