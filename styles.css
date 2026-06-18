@@ -64,6 +64,8 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .segmented button { background: transparent; color: var(--muted); }
 .segmented button.active { background: var(--accent); color: white; }
 .auth-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; background: rgba(255,255,255,.72); border: 2px solid var(--line); border-radius: 14px; padding: 8px 10px; color: var(--muted); font-weight: 900; }
+.sync-info { margin-top: 8px; border: 2px solid var(--line); border-radius: 14px; padding: 8px 10px; background: rgba(255,255,255,.72); color: var(--muted); font-weight: 900; }
+.sync-info.offline { border-color: rgba(216,85,85,.35); background: rgba(216,85,85,.08); color: var(--red); }
 .auth-hint { margin-top: 8px; }
 .mom-menu { display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 320px); gap: 18px; align-items: center; margin-bottom: 14px; overflow: hidden; position: relative; }
 .mom-menu::after { content: '☁️ ⭐ 🌈'; position: absolute; right: 20px; top: 10px; opacity: .12; font-size: 4rem; pointer-events: none; }
@@ -111,11 +113,18 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .invite-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 2px solid var(--line); border-radius: 14px; background: #f7fbfb; padding: 10px; margin-top: 8px; }
 .invite-item.accepted { border-color: rgba(60,155,109,.45); background: rgba(60,155,109,.09); }
 .invite-item.declined { opacity: .72; }
-.protected-box { display: grid; gap: 10px; border-top: 2px solid var(--line); padding-top: 12px; margin-top: 12px; }
+.protected-box, .messages-box { display: grid; gap: 10px; border-top: 2px solid var(--line); padding-top: 12px; margin-top: 12px; }
 .protected-form { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; gap: 8px; align-items: center; }
 .protected-status, .protected-child-label { border: 2px solid rgba(60,155,109,.35); background: rgba(60,155,109,.1); color: var(--green); border-radius: 14px; padding: 10px 12px; font-weight: 900; }
 .protected-child-label { display: inline-flex; align-items: center; justify-content: center; width: 100%; }
 .mode-panel.protected-active .segmented { opacity: .78; }
+.message-form { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(130px, .5fr) minmax(220px, 1fr) auto; gap: 8px; align-items: end; }
+.message-form textarea { min-height: 74px; font-family: inherit; }
+.message-preview, .child-message-card { display: grid; gap: 6px; border: 3px solid var(--line); border-radius: 22px; background: rgba(255,255,255,.82); padding: 14px; font-weight: 900; }
+.message-preview small { color: var(--muted); }
+.message-importante { border-color: rgba(242,188,66,.72); background: rgba(242,188,66,.18); }
+.message-carinho { border-color: rgba(227,93,91,.28); background: rgba(255,198,223,.22); }
+.message-alerta { border-color: rgba(216,85,85,.5); background: rgba(216,85,85,.1); }
 .children-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 12px 0 16px; }
 .profile-tile { min-height: 160px; background: var(--tile-profile-bg, var(--surface)); color: var(--text); border: 2px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); display: grid; place-items: center; gap: 5px; padding: 18px 12px; text-align: center; position: relative; overflow: hidden; }
 .profile-tile::after { content: '✦ ✿ ☁'; position: absolute; inset: auto 10px 6px auto; opacity: .18; font-size: 2.4rem; pointer-events: none; }
@@ -206,6 +215,9 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .mascot-name { font-weight: 900; }
 .mascot-text { color: var(--muted); font-weight: 900; font-size: .9rem; }
 .task-focus { display: grid; gap: 8px; place-items: center; background: rgba(255,255,255,.78); border: 3px solid rgba(255,255,255,.92); border-radius: 24px; padding: clamp(14px, 3vw, 22px); margin-bottom: 10px; box-shadow: inset 0 0 0 4px rgba(255,255,255,.32); }
+.child-message-card { margin: 0 auto 10px; max-width: 720px; text-align: left; }
+.child-message-kicker { color: var(--accent); font-size: .95rem; }
+.child-message-text { font-size: clamp(1.1rem, 4vw, 1.45rem); line-height: 1.25; }
 .task-focus.waiting { background: linear-gradient(135deg, rgba(255,255,255,.85), rgba(242,188,66,.28), rgba(143,155,255,.25)); }
 .focus-emoji { font-size: clamp(2.9rem, 12vw, 5.2rem); min-width: 86px; min-height: 86px; display: grid; place-items: center; border-radius: 24px; background: radial-gradient(circle at 30% 20%, #fff, rgba(255,255,255,.56)); box-shadow: 0 12px 24px rgba(28,75,86,.12); }
 .focus-name { font-size: clamp(1.35rem, 6vw, 2.2rem); font-weight: 900; }
@@ -213,6 +225,7 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .countdown-pill { background: rgba(60,155,109,.14); color: var(--green); border: 2px solid rgba(60,155,109,.28); border-radius: 999px; padding: 8px 14px; font-weight: 900; }
 .child-actions { justify-content: center; gap: 8px; }
 .child-actions button { padding: 10px 12px; }
+.child-actions .big-action { min-height: 58px; min-width: 150px; font-size: 1.02rem; }
 .today-list { margin-top: 10px; }
 body.child-theme-active .today-list .task-item { border-radius: 22px; background: rgba(255,255,255,.82); border-color: rgba(255,255,255,.9); }
 body.child-theme-active .primary, body.child-theme-active .secondary { border-radius: 16px; }
@@ -235,7 +248,7 @@ body.child-theme-active .primary, body.child-theme-active .secondary { border-ra
 .danger { color: var(--red); border-color: rgba(216,85,85,.35); }
 @media (max-width: 680px) {
   .mom-menu { grid-template-columns: 1fr; }
-  .mom-dashboard, .mom-tools, .copy-grid, .invite-form, .invite-item, .protected-form { grid-template-columns: 1fr; }
+  .mom-dashboard, .mom-tools, .copy-grid, .invite-form, .invite-item, .protected-form, .message-form { grid-template-columns: 1fr; }
   .agenda-row { grid-template-columns: 70px minmax(0, 1fr); }
   .agenda-row button { width: 100%; }
   .task-form { grid-template-columns: 62px 1fr; }

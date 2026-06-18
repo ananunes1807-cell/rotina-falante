@@ -1,9 +1,9 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
-import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v33';
+const APP_VERSION = 'v34';
 const DEFAULT_FAMILY_CODE = 'familia-ana';
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_x3H6TE',
@@ -131,10 +131,12 @@ let db = null;
 let auth = null;
 let authUser = null;
 let authPersistenceReady = Promise.resolve();
+let firestoreOfflineReady = false;
 let remoteRef = null;
 let unsub = null;
 let saveTimer = null;
 let applyingRemote = false;
+let isOnline = navigator.onLine;
 let mode = localStorage.getItem('rf_mode') || 'mom';
 let selectedChildId = localStorage.getItem('rf_selectedChild') || '';
 let selectedProfileTab = localStorage.getItem('rf_profileTab') || 'children';
@@ -181,6 +183,17 @@ function emptyRoutines(){
   };
 }
 
+function emptyMessage(childId){
+  return {
+    childId,
+    text: '',
+    type: 'normal',
+    createdAt: '',
+    updatedAt: '',
+    author: ''
+  };
+}
+
 function normalizeState(state){
   state.theme ||= 'ceu';
   state.family ||= {};
@@ -194,6 +207,9 @@ function normalizeState(state){
   state.childProtection ||= { enabled: false, childId: '' };
   state.childProtection.enabled = !!state.childProtection.enabled;
   state.childProtection.childId ||= '';
+  state.messages ||= {};
+  state.events = Array.isArray(state.events) ? state.events.slice(-80) : [];
+  state.lastSyncedAt ||= '';
   state.children = Array.isArray(state.children) ? state.children : [];
   if(!state.children.length) state.children.push({ id: crypto.randomUUID(), type:'child', name:'Criança', birthDate:'', avatar:'⭐', profileTheme:'bichinhos', routines: emptyRoutines(), done:{} });
   if(!state.children.some(child => child.type === 'mom')) state.children.push({ id: crypto.randomUUID(), type:'mom', name:'Responsável', birthDate:'', avatar:'☕', profileTheme:'mae', routines: emptyRoutines(), done:{} });
@@ -211,6 +227,7 @@ function normalizeState(state){
     child.routines ||= emptyRoutines();
     child.done ||= {};
     child.skipped ||= {};
+    state.messages[child.id] ||= emptyMessage(child.id);
     periods.forEach(p => child.routines[p.id] ||= []);
     periods.forEach(p => child.routines[p.id].forEach(task => {
       task.days = Array.isArray(task.days) ? task.days : [0,1,2,3,4,5,6];
@@ -270,13 +287,36 @@ async function pushState(){
   if(!remoteRef) return;
   appState.updatedAtLocal = new Date().toISOString();
   registerPendingChange();
-  await setDoc(remoteRef, { state: appState, updatedAt: serverTimestamp() }, { merge: true });
-  setStatus('Salvo no Firebase', true);
+  try{
+    await setDoc(remoteRef, { state: appState, updatedAt: serverTimestamp() }, { merge: true });
+    appState.lastSyncedAt = new Date().toISOString();
+    saveLocal();
+    setStatus('Salvo no Firebase', true);
+    renderSyncInfo();
+  }catch(e){
+    setStatus('Sem internet. Mostrando última atualização salva.');
+    renderSyncInfo();
+  }
 }
 
 function setStatus(text, ok=false){
   $('syncStatus').textContent = text;
   $('syncStatus').style.color = ok ? 'var(--green)' : 'var(--muted)';
+}
+
+function renderSyncInfo(){
+  if(!$('syncInfo')) return;
+  const last = appState.lastSyncedAt ? formatShortDate(appState.lastSyncedAt) : 'ainda sem sincronização';
+  const offlineText = isOnline ? '' : 'Sem internet. Mostrando última atualização salva. ';
+  $('syncInfo').textContent = `${offlineText}Última sincronização: ${last}.`;
+  $('syncInfo').classList.toggle('offline', !isOnline);
+}
+
+function updateOnlineStatus(){
+  isOnline = navigator.onLine;
+  if(isOnline) setStatus(remoteRef ? 'Online. Sincronizando...' : 'Online');
+  else setStatus('Sem internet. Mostrando última atualização salva.');
+  renderSyncInfo();
 }
 
 function googleErrorText(error){
@@ -360,6 +400,10 @@ function initFirebaseFromForm(){
   localStorage.setItem('rf_momPin', momPin);
   if(!firebaseApp) firebaseApp = initializeApp(firebaseConfig);
   db ||= getFirestore(firebaseApp);
+  if(db && !firestoreOfflineReady){
+    firestoreOfflineReady = true;
+    enableIndexedDbPersistence(db).catch(() => {});
+  }
   if(!auth){
     auth = getAuth(firebaseApp);
     authPersistenceReady = setPersistence(auth, browserLocalPersistence).catch((e) => {
@@ -399,7 +443,7 @@ function initFirebaseFromForm(){
 function listenToRemote(ref, label){
   remoteRef = ref;
   if(unsub) unsub();
-  unsub = onSnapshot(remoteRef, (snap) => {
+  unsub = onSnapshot(remoteRef, { includeMetadataChanges: true }, (snap) => {
     if(!snap.exists()){
       pushState();
       return;
@@ -412,11 +456,17 @@ function listenToRemote(ref, label){
       applyingRemote = false;
       renderAll();
     }
-    setStatus(label, true);
+    if(!snap.metadata.fromCache){
+      appState.lastSyncedAt = new Date().toISOString();
+      saveLocal();
+    }
+    setStatus(snap.metadata.fromCache ? 'Sem internet. Mostrando última atualização salva.' : label, !snap.metadata.fromCache);
+    renderSyncInfo();
   }, () => setStatus('Sem permissão no Firestore'));
   $('setupPanel').hidden = true;
   $('modePanel').hidden = false;
   renderAll();
+  renderSyncInfo();
 }
 
 async function connectFirebase(){
@@ -530,6 +580,7 @@ function renderAll(){
   renderMom();
   renderChild();
   renderAlarmOverlay();
+  renderSyncInfo();
 }
 
 function applyTheme(themeId){
@@ -709,7 +760,77 @@ function renderFamilyPanel(){
     .join('');
   $('inviteRoutine').innerHTML = appState.children.map(child => `<option value="${child.id}">${child.avatar} ${escapeHtml(child.name)}</option>`).join('');
   renderProtectedControl();
+  renderMessagesPanel();
   renderInviteList();
+}
+
+function childMessage(childId){
+  appState.messages ||= {};
+  appState.messages[childId] ||= emptyMessage(childId);
+  return appState.messages[childId];
+}
+
+function messageTypeLabel(type){
+  return {
+    normal: 'Recado',
+    importante: 'Importante',
+    carinho: 'Carinho',
+    alerta: 'Alerta'
+  }[type] || 'Recado';
+}
+
+function messageTypeEmoji(type){
+  return {
+    normal: '💬',
+    importante: '⭐',
+    carinho: '💛',
+    alerta: '🔔'
+  }[type] || '💬';
+}
+
+function renderMessagesPanel(){
+  if(!$('messageChildSelect')) return;
+  const children = childProfiles();
+  const currentId = $('messageChildSelect').value || children[0]?.id || '';
+  $('messageChildSelect').innerHTML = children.length
+    ? children.map(child => `<option value="${child.id}">${child.avatar} ${escapeHtml(child.name)}</option>`).join('')
+    : '<option value="">Nenhuma criança cadastrada</option>';
+  $('messageChildSelect').value = children.some(child => child.id === currentId) ? currentId : (children[0]?.id || '');
+  const message = childMessage($('messageChildSelect').value);
+  $('messageTypeSelect').value = message.type || 'normal';
+  $('messageText').value = message.text || '';
+  renderMessagePreview(message);
+}
+
+function renderMessagePreview(message){
+  if(!$('messagePreview')) return;
+  $('messagePreview').innerHTML = message?.text ? `
+    <div class="message-preview message-${message.type || 'normal'}">
+      <strong>${messageTypeEmoji(message.type)} ${messageTypeLabel(message.type)}</strong>
+      <span>${escapeHtml(message.text)}</span>
+      <small>${message.author ? `por ${escapeHtml(message.author)} · ` : ''}${message.updatedAt ? formatShortDate(message.updatedAt) : ''}</small>
+    </div>
+  ` : '<div class="empty-state">Escolha uma criança e escreva um recado.</div>';
+}
+
+function saveChildMessage(){
+  const child = childById($('messageChildSelect').value);
+  if(!child || child.type === 'mom') return;
+  const previous = childMessage(child.id);
+  const now = new Date().toISOString();
+  const message = {
+    childId: child.id,
+    text: $('messageText').value.trim(),
+    type: $('messageTypeSelect').value || 'normal',
+    createdAt: previous.createdAt || now,
+    updatedAt: now,
+    author: authUser?.email || authUser?.displayName || 'responsável'
+  };
+  appState.messages ||= {};
+  appState.messages[child.id] = message;
+  scheduleSave(`atualizou um recado para ${child.name}`);
+  renderMessagesPanel();
+  renderChild();
 }
 
 function renderProtectedControl(){
@@ -1142,6 +1263,7 @@ function renderChild(){
       <div class="mascot-text">${next ? 'Vamos fazer uma missão de cada vez.' : mascot.wait}</div>
     </div>
   `;
+  renderChildMessageCard(child);
   $('taskFocus').classList.toggle('waiting', !next);
   $('taskFocus').innerHTML = next ? `
     <div class="focus-emoji">${next.important ? '❗' : (next.emoji || '✅')}</div>
@@ -1168,6 +1290,19 @@ function renderChild(){
   }
   const tasks = tasksForToday(child, period);
   $('todayList').innerHTML = tasks.map(task => childTaskHtml(task, child)).join('');
+}
+
+function renderChildMessageCard(child){
+  if(!$('childMessageCard')) return;
+  const message = childMessage(child.id);
+  $('childMessageCard').className = `child-message-card message-${message.type || 'normal'}`;
+  $('childMessageCard').innerHTML = message.text ? `
+    <div class="child-message-kicker">${messageTypeEmoji(message.type)} ${messageTypeLabel(message.type)}</div>
+    <div class="child-message-text">${escapeHtml(message.text)}</div>
+  ` : `
+    <div class="child-message-kicker">💬 Recado</div>
+    <div class="child-message-text">Nenhum recado agora.</div>
+  `;
 }
 
 function taskStepsHtml(task){
@@ -1224,12 +1359,46 @@ function speakTask(child, taskId){
   speak(task.message || `${child.name}, tarefa: ${task.name}.${task.time ? ' Horário: ' + task.time + '.' : ''}${steps}`);
 }
 
+function currentChildTaskInfo(){
+  const child = childById(selectedChildId);
+  const period = currentPeriod();
+  const task = nextTask(child, period);
+  const waiting = task ? null : nextUpcomingTask(child);
+  return { child, period, task, waiting };
+}
+
+function missionSpeechText(child, task, waiting=null){
+  if(task){
+    const steps = Array.isArray(task.steps) && task.steps.length ? ` Passinhos: ${task.steps.join(', ')}.` : '';
+    return task.message || `${child.name}, missão de agora: ${task.name}.${task.time ? ' Horário: ' + task.time + '.' : ''}${steps}`;
+  }
+  if(waiting) return `${child.name}, a missão de agora terminou. Próxima missão: ${waiting.task.name}${waiting.task.time ? ' às ' + waiting.task.time : ''}.`;
+  return `${child.name}, todas as tarefas de hoje foram feitas. Muito bem!`;
+}
+
+function messageSpeechText(child){
+  const message = childMessage(child.id);
+  if(!message.text) return `${child.name}, não tem recado novo agora.`;
+  return `${messageTypeLabel(message.type)} do responsável para ${child.name}: ${message.text}`;
+}
+
 function speakTodayTasks(){
   const child = childById(selectedChildId);
   const tasks = periods.flatMap(period => tasksForToday(child, period.id).map(task => ({ ...task, period: period.label })));
   if(!tasks.length) return speak(`${child.name}, não tem tarefas marcadas para hoje.`);
   const text = tasks.map(task => `${task.period}: ${task.name}${task.time ? ' às ' + task.time : ''}`).join('. ');
   speak(`${child.name}, suas tarefas de hoje são: ${text}.`);
+}
+
+function speakChildMessage(){
+  const child = childById(selectedChildId);
+  speak(messageSpeechText(child));
+}
+
+function speakEverything(){
+  const { child, task, waiting } = currentChildTaskInfo();
+  const nextText = waiting && task ? ` Depois vem ${waiting.task.name}${waiting.task.time ? ' às ' + waiting.task.time : ''}.` : '';
+  speak(`${missionSpeechText(child, task, waiting)} ${nextText} ${messageSpeechText(child)}`);
 }
 
 function speakMomToday(){
@@ -1374,17 +1543,8 @@ function speakChild(child){
 }
 
 function speakCurrentMission(){
-  const child = childById(selectedChildId);
-  const period = currentPeriod();
-  const task = nextTask(child, period);
-  const periodLabel = periods.find(p => p.id === period)?.label || 'agora';
-  if(!task){
-    const waiting = nextUpcomingTask(child);
-    if(waiting) return speak(`${child.name}, a rotina de ${periodLabel} está completa. Modo espera. Próxima tarefa: ${waiting.task.name}${waiting.task.time ? ' às ' + waiting.task.time : ''}.`);
-    return speak(`${child.name}, todas as tarefas de hoje foram feitas. Muito bem!`);
-  }
-  const steps = Array.isArray(task.steps) && task.steps.length ? ` Passinhos: ${task.steps.join(', ')}.` : '';
-  speak(task.message || `${child.name}, missão de agora: ${task.name}.${task.time ? ' Horário: ' + task.time + '.' : ''}${steps}`);
+  const { child, task, waiting } = currentChildTaskInfo();
+  speak(missionSpeechText(child, task, waiting));
 }
 
 function alarmText(child, period, task){
@@ -1429,7 +1589,30 @@ function testFullAlarm(childId, periodId, taskId){
 
 function askForHelp(){
   const child = childById(selectedChildId);
+  registerChildEvent('help');
   gentleAlarmSpeak(`${child.name} precisa de ajuda com a rotina.`, child);
+}
+
+function reportConfused(){
+  const child = childById(selectedChildId);
+  registerChildEvent('confused');
+  gentleAlarmSpeak(`${child.name} está confuso e precisa de uma explicação simples.`, child);
+}
+
+function registerChildEvent(type){
+  const { child, task } = currentChildTaskInfo();
+  appState.events ||= [];
+  appState.events.push({
+    id: crypto.randomUUID(),
+    type,
+    childId: child.id,
+    childName: child.name,
+    taskId: task?.id || '',
+    taskName: task?.name || '',
+    at: new Date().toISOString()
+  });
+  appState.events = appState.events.slice(-80);
+  scheduleSave(type === 'help' ? `${child.name} pediu ajuda` : `${child.name} ficou confuso`);
 }
 
 function enterFullscreen(){
@@ -1661,6 +1844,11 @@ $('closeEditorBtn').addEventListener('click', () => { editingChildId = ''; $('ro
 $('addTaskBtn').addEventListener('click', addTask);
 $('cancelTaskEditBtn').addEventListener('click', () => resetTaskForm(true));
 if($('timeAnnounceInterval')) $('timeAnnounceInterval').addEventListener('change', () => setTimeAnnounceInterval($('timeAnnounceInterval').value));
+if($('messageChildSelect')) $('messageChildSelect').addEventListener('change', renderMessagesPanel);
+if($('messageTypeSelect')) $('messageTypeSelect').addEventListener('change', () => renderMessagePreview({ ...childMessage($('messageChildSelect').value), type: $('messageTypeSelect').value, text: $('messageText').value }));
+if($('messageText')) $('messageText').addEventListener('input', () => renderMessagePreview({ ...childMessage($('messageChildSelect').value), type: $('messageTypeSelect').value, text: $('messageText').value }));
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
 document.addEventListener('click', (event) => {
   const target = event.target.closest('button');
   if(!target) return;
@@ -1677,12 +1865,16 @@ document.addEventListener('click', (event) => {
   if(target.id === 'speakMomTodayBtn') return run(speakMomToday);
   if(target.id === 'copyRoutineBtn') return run(copyRoutine);
   if(target.id === 'sendInviteBtn') return run(sendInvite);
+  if(target.id === 'saveMessageBtn') return run(saveChildMessage);
   if(target.id === 'enableProtectedBtn') return run(enableProtectedChildMode);
   if(target.id === 'disableProtectedBtn') return run(() => disableProtectedChildMode(true));
   if(target.id === 'unlockProtectedBtn') return run(() => disableProtectedChildMode(true));
   if(target.id === 'stopSpeechBtn') return run(stopSpeaking);
   if(target.id === 'fullscreenBtn') return run(enterFullscreen);
   if(target.id === 'helpBtn') return run(askForHelp);
+  if(target.id === 'confusedBtn') return run(reportConfused);
+  if(target.id === 'speakMessageBtn') return run(speakChildMessage);
+  if(target.id === 'speakAllBtn') return run(speakEverything);
   if(target.id === 'alarmDoneBtn') return run(finishAlarm);
   if(target.id === 'alarmSkipBtn') return run(skipAlarm);
   if(target.id === 'alarmDismissBtn') return run(dismissAlarm);

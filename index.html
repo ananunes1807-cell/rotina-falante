@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#3d7f91">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Rotina Falante">
-  <link rel="manifest" href="./manifest.webmanifest?v=33">
+  <link rel="manifest" href="./manifest.webmanifest?v=34">
   <link rel="icon" href="./icon-192.png">
   <title>Rotina Falante</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=33">
+  <link rel="stylesheet" href="./styles.css?v=34">
 </head>
 <body>
   <div class="app-shell">
@@ -55,6 +55,7 @@
           <span id="authUserLabel">Sem login Google</span>
           <button class="secondary small-btn" id="logoutBtn">Sair</button>
         </div>
+        <div class="sync-info" id="syncInfo">Última sincronização: ainda sem sincronização.</div>
       </section>
 
       <section id="momView" hidden>
@@ -152,6 +153,24 @@
             </div>
             <div class="protected-status" id="protectedStatus">Proteção desligada.</div>
           </div>
+          <div class="messages-box">
+            <div>
+              <div class="section-title">Recados do responsável</div>
+              <p class="muted">Um recado simples por criança. Ele aparece grande no modo criança e pode ser lido em voz alta.</p>
+            </div>
+            <div class="message-form">
+              <select id="messageChildSelect"></select>
+              <select id="messageTypeSelect">
+                <option value="normal">Normal</option>
+                <option value="importante">Importante</option>
+                <option value="carinho">Carinho</option>
+                <option value="alerta">Alerta</option>
+              </select>
+              <textarea id="messageText" placeholder="Escreva o recado para a criança"></textarea>
+              <button class="primary" id="saveMessageBtn">Salvar recado</button>
+            </div>
+            <div id="messagePreview"></div>
+          </div>
         </section>
 
         <div class="settings-strip">
@@ -216,19 +235,23 @@
             <div class="streak-badge" id="streakBadge">🔥 0 dias</div>
           </div>
           <div class="mascot-card" id="mascotCard"></div>
+          <div class="child-message-card" id="childMessageCard"></div>
           <div class="task-focus" id="taskFocus">
             <div class="focus-emoji">⭐</div>
             <div class="focus-name">Tudo pronto</div>
             <div class="focus-time">Sem tarefa pendente</div>
           </div>
           <div class="child-actions">
-            <button class="primary" id="doneBtn">Já fiz</button>
+            <button class="secondary big-action" id="repeatBtn">🔊 Ouvir missão</button>
+            <button class="secondary big-action" id="speakMessageBtn">🔊 Ouvir recado</button>
+            <button class="secondary big-action" id="speakAllBtn">🔊 Ouvir tudo</button>
+            <button class="secondary big-action" id="confusedBtn">😕 Estou confuso</button>
+            <button class="secondary big-action" id="helpBtn">🆘 Preciso de ajuda</button>
+            <button class="primary big-action" id="doneBtn">✅ Já fiz</button>
             <button class="secondary" id="skipBtn">Pular hoje</button>
-            <button class="secondary" id="repeatBtn">🔊 Missão</button>
             <button class="secondary" id="speakTodayBtn">🔊 Tarefas do dia</button>
             <button class="secondary" id="stopSpeechBtn">⏸ Parar som</button>
             <button class="secondary" id="fullscreenBtn">Tela cheia</button>
-            <button class="secondary" id="helpBtn">Preciso de ajuda</button>
             <button class="secondary danger protected-exit-btn" id="unlockProtectedBtn" hidden>🔒 Sair protegido</button>
           </div>
         </div>
@@ -239,6 +262,6 @@
     <div class="alarm-overlay" id="alarmOverlay" hidden></div>
   </div>
 
-  <script type="module" src="./app.js?v=33"></script>
+  <script type="module" src="./app.js?v=34"></script>
 </body>
 </html>

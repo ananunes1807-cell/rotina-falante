@@ -1,43 +1,113 @@
-# Nova Plataforma Firebase
+# Rotina Falante - Firestore
 
-Esta versao usa **Cloud Firestore**.
+Versao atual: v34.
 
-URL da nova versao no GitHub Pages:
+O app usa Cloud Firestore para sincronizar a rotina da familia entre aparelhos. A tela tambem guarda a ultima atualizacao em `localStorage`, e o Firestore tenta manter cache offline no navegador.
+
+URL publicada:
 
 ```txt
-https://ananunes1807-cell.github.io/alarme-falante/nova/index.html
+https://ananunes1807-cell.github.io/rotina-falante/
 ```
 
-## 1. Criar app Web no Firebase
+## Documento principal
 
-1. Abra o Firebase Console.
-2. Entre no projeto **Alarme falado**.
-3. Clique na engrenagem **Configuracoes do projeto**.
-4. Em **Seus apps**, crie ou abra o app Web.
-5. Copie o bloco `firebaseConfig`.
+Com login Google, os dois responsaveis usam o mesmo documento:
 
-## 2. Regras para testar
+```txt
+familias/familia-ana/plataforma/principal
+```
 
-No Firestore, aba **Regras**, use:
+O documento guarda um campo `state` com:
+
+- `children`: perfis das criancas e responsaveis;
+- `messages`: recados individuais por `childId`;
+- `events`: registros de ajuda ou confusao;
+- `childProtection`: configuracao do modo crianca protegido;
+- `family`: responsaveis, convites e avisos de mudanca;
+- `lastSyncedAt`: data/hora da ultima sincronizacao confirmada.
+
+## Recados
+
+Cada recado fica em `state.messages` usando o id da crianca:
+
+```js
+messages: {
+  "childId": {
+    childId: "childId",
+    text: "Texto do recado",
+    type: "normal", // normal, importante, carinho ou alerta
+    createdAt: "2026-06-18T20:00:00.000Z",
+    updatedAt: "2026-06-18T20:00:00.000Z",
+    author: "email-do-responsavel"
+  }
+}
+```
+
+No modo familia, o responsavel edita um recado por crianca. No modo crianca, o recado aparece em um card separado e pode ser ouvido com o botao **Ouvir recado**.
+
+## Eventos
+
+Quando a crianca toca em **Estou confuso** ou **Preciso de ajuda**, o app registra em `state.events`:
+
+```js
+{
+  id: "uuid",
+  type: "confused", // ou "help"
+  childId: "id-da-crianca",
+  childName: "Nome",
+  taskId: "id-da-tarefa-atual",
+  taskName: "Nome da tarefa atual",
+  at: "2026-06-18T20:00:00.000Z"
+}
+```
+
+O app guarda os eventos mais recentes para o responsavel consultar futuramente.
+
+## Offline
+
+O app usa tres camadas:
+
+1. Service worker para manter arquivos do app em cache.
+2. Firestore offline com IndexedDB quando o navegador permitir.
+3. `localStorage` como fallback da ultima rotina e ultimo recado carregados.
+
+Quando o aparelho fica sem internet, aparece:
+
+```txt
+Sem internet. Mostrando ultima atualizacao salva.
+```
+
+Tambem aparece a data/hora da ultima sincronizacao bem-sucedida.
+
+## Regras recomendadas
+
+Use estas regras no Firestore para liberar somente os dois e-mails responsaveis:
 
 ```js
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /familias/{familiaId}/plataforma/{docId} {
-      allow read, write: if true;
+    function responsavelLiberado() {
+      return request.auth != null
+        && request.auth.token.email in [
+          "anacarolinamoraisdosreis@gmail.com",
+          "carlionison.43@gmail.com"
+        ];
+    }
+
+    match /familias/familia-ana/plataforma/{docId} {
+      allow read, write: if responsavelLiberado();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
 ```
 
-Essas regras sao simples para teste. Depois, o ideal e colocar login de mae e modo crianca com permissao de leitura.
+## Observacao
 
-## 3. Usar no app
-
-1. Abra a nova plataforma.
-2. Cole o `firebaseConfig`.
-3. Digite o codigo da familia, por exemplo `familia-ana`.
-4. Clique em **Conectar Firestore**.
-
-O modo mae edita filhos, idade e rotinas. O modo crianca mostra a rotina atual de cada filho.
+O botao **Conectar Firestore** sem Google existe por compatibilidade, mas o uso recomendado e entrar com Google.
