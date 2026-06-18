@@ -3,7 +3,12 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from 'https://
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v30';
+const APP_VERSION = 'v31';
+const DEFAULT_FAMILY_CODE = 'familia-ana';
+const RESPONSIBLE_EMAILS = [
+  'anacarolinamoraisdosreis@gmail.com',
+  'carlionison.43@gmail.com'
+];
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
   { id: 'tarde', label: 'Tarde', emoji: '🌤️' },
@@ -108,7 +113,7 @@ const routineTemplates = [
 const savedConfigText = localStorage.getItem('rf_firebaseConfig') || '';
 const badEmbeddedApiKey = 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_X3H6TE';
 const defaultConfigText = savedConfigText.includes(badEmbeddedApiKey) ? '' : savedConfigText;
-let familyCode = localStorage.getItem('rf_familyCode') || '';
+let familyCode = localStorage.getItem('rf_familyCode') || DEFAULT_FAMILY_CODE;
 let momPin = localStorage.getItem('rf_momPin') || '1234';
 let appState = loadLocalState();
 let firebaseApp = null;
@@ -134,6 +139,7 @@ let timeAnnounceInterval = Number(localStorage.getItem('rf_timeAnnounceInterval'
 let timeAnnounceTimer = null;
 let audioContext = null;
 let pendingSpeechTimer = null;
+let pendingChangeReason = '';
 
 function loadLocalState(){
   const saved = localStorage.getItem('rf_state');
@@ -167,6 +173,14 @@ function emptyRoutines(){
 
 function normalizeState(state){
   state.theme ||= 'ceu';
+  state.family ||= {};
+  state.family.code ||= DEFAULT_FAMILY_CODE;
+  state.family.responsibles = RESPONSIBLE_EMAILS.map(email => ({
+    email,
+    name: state.family?.responsibles?.find(item => item.email === email)?.name || responsibleNameFromEmail(email)
+  }));
+  state.family.changes = Array.isArray(state.family.changes) ? state.family.changes.slice(-12) : [];
+  state.family.invites = Array.isArray(state.family.invites) ? state.family.invites.slice(-12) : [];
   state.children = Array.isArray(state.children) ? state.children : [];
   if(!state.children.length) state.children.push({ id: crypto.randomUUID(), type:'child', name:'Criança', birthDate:'', avatar:'⭐', profileTheme:'bichinhos', routines: emptyRoutines(), done:{} });
   if(!state.children.some(child => child.type === 'mom')) state.children.push({ id: crypto.randomUUID(), type:'mom', name:'Responsável', birthDate:'', avatar:'☕', profileTheme:'mae', routines: emptyRoutines(), done:{} });
@@ -231,7 +245,8 @@ function saveLocal(){
   localStorage.setItem('rf_state', JSON.stringify(appState));
 }
 
-function scheduleSave(){
+function scheduleSave(reason=''){
+  if(reason) noteChange(reason);
   saveLocal();
   if(!remoteRef || applyingRemote) return;
   clearTimeout(saveTimer);
@@ -241,6 +256,7 @@ function scheduleSave(){
 async function pushState(){
   if(!remoteRef) return;
   appState.updatedAtLocal = new Date().toISOString();
+  registerPendingChange();
   await setDoc(remoteRef, { state: appState, updatedAt: serverTimestamp() }, { merge: true });
   setStatus('Salvo no Firebase', true);
 }
@@ -254,6 +270,53 @@ function googleErrorText(error){
   const code = error?.code || 'sem-codigo';
   const message = error?.message ? ` - ${String(error.message).slice(0, 90)}` : '';
   return `Erro Google: ${code}${message}`;
+}
+
+function normalizedEmail(email){
+  return String(email || '').trim().toLowerCase();
+}
+
+function responsibleNameFromEmail(email){
+  const normalized = normalizedEmail(email);
+  if(normalized.startsWith('anacarolina')) return 'Ana Carolina';
+  if(normalized.startsWith('carlionison')) return 'Carlionison';
+  return normalized.split('@')[0] || 'Responsável';
+}
+
+function currentResponsibleEmail(){
+  return normalizedEmail(authUser?.email);
+}
+
+function isAuthorizedResponsible(user=authUser){
+  return RESPONSIBLE_EMAILS.includes(normalizedEmail(user?.email));
+}
+
+function responsibleDocRef(){
+  const code = cleanFamilyCode($('familyCode')?.value || familyCode || DEFAULT_FAMILY_CODE) || DEFAULT_FAMILY_CODE;
+  familyCode = code;
+  localStorage.setItem('rf_familyCode', familyCode);
+  appState.family ||= {};
+  appState.family.code = code;
+  return doc(db, 'familias', code, 'plataforma', 'principal');
+}
+
+function registerPendingChange(){
+  if(!pendingChangeReason || !authUser) return;
+  appState.family ||= {};
+  appState.family.changes = Array.isArray(appState.family.changes) ? appState.family.changes : [];
+  appState.family.changes.push({
+    id: crypto.randomUUID(),
+    by: currentResponsibleEmail(),
+    byName: authUser.displayName || responsibleNameFromEmail(authUser.email),
+    text: pendingChangeReason,
+    at: new Date().toISOString()
+  });
+  appState.family.changes = appState.family.changes.slice(-12);
+  pendingChangeReason = '';
+}
+
+function noteChange(text){
+  pendingChangeReason = text || 'atualizou o painel família';
 }
 
 function firebaseConfigText(){
@@ -293,15 +356,25 @@ function initFirebaseFromForm(){
       authUser = user;
       renderAuthBar();
       if(user && db){
+        if(!isAuthorizedResponsible(user)){
+          setStatus('Este e-mail não está liberado para o modo família');
+          signOut(auth).catch(()=>{});
+          return;
+        }
         localStorage.setItem('rf_authMode', 'google');
-        listenToRemote(doc(db, 'usuarios', user.uid, 'plataforma', 'principal'), `Conectado com Google: ${user.email || user.displayName || 'conta Google'}`);
+        listenToRemote(responsibleDocRef(), `Modo família: ${user.email || user.displayName || 'conta Google'}`);
       }
     });
     authPersistenceReady.then(() => getRedirectResult(auth)).then((result) => {
       if(result?.user && db){
         authUser = result.user;
+        if(!isAuthorizedResponsible(authUser)){
+          setStatus('Este e-mail não está liberado para o modo família');
+          signOut(auth).catch(()=>{});
+          return;
+        }
         localStorage.setItem('rf_authMode', 'google');
-        listenToRemote(doc(db, 'usuarios', authUser.uid, 'plataforma', 'principal'), `Conectado com Google: ${authUser.email || authUser.displayName || 'conta Google'}`);
+        listenToRemote(responsibleDocRef(), `Modo família: ${authUser.email || authUser.displayName || 'conta Google'}`);
       }
     }).catch((e) => {
       setStatus(googleErrorText(e));
@@ -365,8 +438,12 @@ async function loginGoogle(){
     }
     authUser = auth.currentUser;
     if(!authUser) throw new Error('auth');
+    if(!isAuthorizedResponsible(authUser)){
+      await signOut(auth).catch(()=>{});
+      throw new Error('email-nao-liberado');
+    }
     localStorage.setItem('rf_authMode', 'google');
-    listenToRemote(doc(db, 'usuarios', authUser.uid, 'plataforma', 'principal'), `Conectado com Google: ${authUser.email || authUser.displayName || 'conta Google'}`);
+    listenToRemote(responsibleDocRef(), `Modo família: ${authUser.email || authUser.displayName || 'conta Google'}`);
   }catch(e){
     setStatus(googleErrorText(e));
   }
@@ -444,7 +521,7 @@ function renderThemes(){
   picker.innerHTML = themes.map(t => `<button class="theme-chip ${appState.theme===t.id?'active':''}" data-theme="${t.id}">${t.emoji} ${t.label}</button>`).join('');
   document.querySelectorAll('[data-theme]').forEach(btn => btn.addEventListener('click', () => {
     appState.theme = btn.dataset.theme;
-    scheduleSave();
+    scheduleSave('alterou o tema do app');
     renderAll();
   }));
 }
@@ -460,6 +537,7 @@ function renderMom(){
   const inMomTab = selectedProfileTab === 'mom';
   renderMomDashboard();
   renderMomTools();
+  renderFamilyPanel();
   $('profilesTitle').textContent = inMomTab ? 'Rotina dos responsáveis' : 'Filhos e rotinas';
   $('profilesHint').textContent = inMomTab ? 'Edite nome, emoji e alarmes dos responsáveis. Essa rotina toca separada das crianças.' : 'Edite aqui. Os aparelhos das crianças atualizam automaticamente.';
   $('addChildBtn').hidden = inMomTab;
@@ -577,6 +655,91 @@ function renderMomTools(){
   $('copyTo').value = appState.children.find(child => child.id !== current)?.id || current;
 }
 
+function renderFamilyPanel(){
+  if(!$('responsibleGrid')) return;
+  const me = currentResponsibleEmail();
+  const responsibles = RESPONSIBLE_EMAILS.map(email => ({
+    email,
+    name: responsibleNameFromEmail(email),
+    active: email === me
+  }));
+  $('responsibleGrid').innerHTML = responsibles.map(person => `
+    <div class="responsible-card ${person.active ? 'active' : ''}">
+      <div class="responsible-avatar">${person.name.slice(0,1).toUpperCase()}</div>
+      <div>
+        <div class="task-name">${escapeHtml(person.name)}${person.active ? ' · você' : ''}</div>
+        <div class="task-time">${escapeHtml(person.email)}</div>
+      </div>
+    </div>
+  `).join('');
+  const changes = (appState.family?.changes || []).filter(change => change.by !== me).slice(-3).reverse();
+  $('changeNotice').innerHTML = changes.length ? changes.map(change => `
+    <div class="alert-line">
+      ${escapeHtml(change.byName || responsibleNameFromEmail(change.by))} ${escapeHtml(change.text)}.
+      <span>${formatShortDate(change.at)}</span>
+    </div>
+  `).join('') : '<div class="alert-line good">Nenhuma mudança nova de outro responsável.</div>';
+  $('inviteTarget').innerHTML = RESPONSIBLE_EMAILS
+    .filter(email => email !== me)
+    .map(email => `<option value="${email}">${escapeHtml(responsibleNameFromEmail(email))}</option>`)
+    .join('');
+  $('inviteRoutine').innerHTML = appState.children.map(child => `<option value="${child.id}">${child.avatar} ${escapeHtml(child.name)}</option>`).join('');
+  renderInviteList();
+}
+
+function renderInviteList(){
+  if(!$('inviteList')) return;
+  const me = currentResponsibleEmail();
+  const invites = (appState.family?.invites || []).slice().reverse();
+  $('inviteList').innerHTML = invites.length ? invites.map(invite => {
+    const mine = invite.to === me;
+    const status = invite.status === 'accepted' ? 'Aceito' : invite.status === 'declined' ? 'Recusado' : 'Pendente';
+    const canAnswer = mine && invite.status === 'pending';
+    return `
+      <div class="invite-item ${invite.status || 'pending'}">
+        <div>
+          <div class="task-name">${escapeHtml(invite.profileName || 'Rotina')} · ${status}</div>
+          <div class="task-time">De ${escapeHtml(responsibleNameFromEmail(invite.from))} para ${escapeHtml(responsibleNameFromEmail(invite.to))}</div>
+          ${invite.message ? `<div class="task-message">💬 ${escapeHtml(invite.message)}</div>` : ''}
+        </div>
+        ${canAnswer ? `<div class="task-actions"><button class="secondary" data-invite-accept="${invite.id}">Aceitar</button><button class="secondary danger" data-invite-decline="${invite.id}">Recusar</button></div>` : ''}
+      </div>
+    `;
+  }).join('') : '<div class="empty-state">Nenhum convite ainda.</div>';
+}
+
+function sendInvite(){
+  if(!authUser || !isAuthorizedResponsible()) return setStatus('Entre com um e-mail responsável para convidar');
+  const to = $('inviteTarget').value;
+  const profile = childById($('inviteRoutine').value);
+  if(!to || !profile) return;
+  appState.family ||= {};
+  appState.family.invites = Array.isArray(appState.family.invites) ? appState.family.invites : [];
+  appState.family.invites.push({
+    id: crypto.randomUUID(),
+    from: currentResponsibleEmail(),
+    to,
+    profileId: profile.id,
+    profileName: profile.name,
+    message: $('inviteMessage').value.trim(),
+    status: 'pending',
+    at: new Date().toISOString()
+  });
+  appState.family.invites = appState.family.invites.slice(-12);
+  $('inviteMessage').value = '';
+  scheduleSave(`enviou um convite sobre a rotina de ${profile.name}`);
+  renderFamilyPanel();
+}
+
+function answerInvite(id, status){
+  const invite = (appState.family?.invites || []).find(item => item.id === id);
+  if(!invite || invite.to !== currentResponsibleEmail()) return;
+  invite.status = status;
+  invite.answeredAt = new Date().toISOString();
+  scheduleSave(`${status === 'accepted' ? 'aceitou' : 'recusou'} um convite de rotina`);
+  renderFamilyPanel();
+}
+
 function profileDetailHtml(child){
   return `
     <div class="profile-detail-head">
@@ -676,17 +839,18 @@ function updateChild(id, patch){
   const child = childById(id);
   if(patch.name !== undefined && !patch.name) patch.name = child.type === 'mom' ? 'Responsável' : 'Criança';
   Object.assign(child, patch);
-  scheduleSave();
+  scheduleSave(`alterou o perfil de ${child.name}`);
   renderChild();
 }
 
 function removeChild(id){
   if(appState.children.length <= 1) return;
-  if(childById(id).type === 'mom' && appState.children.filter(child => child.type === 'mom').length <= 1) return;
+  const child = childById(id);
+  if(child.type === 'mom' && appState.children.filter(child => child.type === 'mom').length <= 1) return;
   appState.children = appState.children.filter(c => c.id !== id);
   if(selectedChildId === id) selectedChildId = childProfiles()[0]?.id || appState.children[0].id;
   if(editingChildId === id) editingChildId = '';
-  scheduleSave();
+  scheduleSave(`removeu o perfil de ${child.name}`);
   renderAll();
 }
 
@@ -795,7 +959,7 @@ function addTask(){
     child.routines[editingPeriod].push({ id: crypto.randomUUID(), ...taskData });
   }
   resetTaskForm(false);
-  scheduleSave();
+  scheduleSave(editingTaskId ? `editou uma tarefa de ${child.name}` : `adicionou uma tarefa para ${child.name}`);
   renderEditor();
   renderChild();
 }
@@ -834,7 +998,7 @@ function deleteTask(taskId){
   const child = childById(editingChildId);
   child.routines[editingPeriod] = child.routines[editingPeriod].filter(t => t.id !== taskId);
   if(editingTaskId === taskId) resetTaskForm(false);
-  scheduleSave();
+  scheduleSave(`excluiu uma tarefa de ${child.name}`);
   renderEditor();
   renderChild();
 }
@@ -846,7 +1010,7 @@ function moveTask(taskId, dir){
   const nextIndex = index + dir;
   if(index < 0 || nextIndex < 0 || nextIndex >= tasks.length) return;
   [tasks[index], tasks[nextIndex]] = [tasks[nextIndex], tasks[index]];
-  scheduleSave();
+  scheduleSave(`reorganizou a rotina de ${child.name}`);
   renderEditor();
   renderChild();
 }
@@ -871,7 +1035,7 @@ function applyTemplate(templateId){
   editingChildId = target.id;
   selectedProfileTab = target.type === 'mom' ? 'mom' : 'children';
   localStorage.setItem('rf_profileTab', selectedProfileTab);
-  scheduleSave();
+  scheduleSave(`adicionou modelo pronto para ${target.name}`);
   renderAll();
   openEditor(target.id);
 }
@@ -890,7 +1054,7 @@ function copyRoutine(){
   editingChildId = to.id;
   selectedProfileTab = to.type === 'mom' ? 'mom' : 'children';
   localStorage.setItem('rf_profileTab', selectedProfileTab);
-  scheduleSave();
+  scheduleSave(`copiou a rotina de ${from.name} para ${to.name}`);
   renderAll();
   openEditor(to.id);
 }
@@ -1379,6 +1543,12 @@ function escapeHtml(value){
   return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
 }
 
+function formatShortDate(value){
+  const d = new Date(value);
+  if(Number.isNaN(d.getTime())) return '';
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
 function addChild(){
   if(selectedProfileTab === 'mom'){
     const profile = momProfile();
@@ -1391,7 +1561,7 @@ function addChild(){
   appState.children.push(child);
   editingChildId = child.id;
   selectedChildId = child.id;
-  scheduleSave();
+  scheduleSave(`adicionou o perfil de ${child.name}`);
   renderAll();
 }
 
@@ -1429,6 +1599,7 @@ document.addEventListener('click', (event) => {
   if(target.id === 'speakTodayBtn') return run(speakTodayTasks);
   if(target.id === 'speakMomTodayBtn') return run(speakMomToday);
   if(target.id === 'copyRoutineBtn') return run(copyRoutine);
+  if(target.id === 'sendInviteBtn') return run(sendInvite);
   if(target.id === 'stopSpeechBtn') return run(stopSpeaking);
   if(target.id === 'fullscreenBtn') return run(enterFullscreen);
   if(target.id === 'helpBtn') return run(askForHelp);
@@ -1447,6 +1618,8 @@ document.addEventListener('click', (event) => {
     const [childId, periodId, taskId] = target.dataset.testAlarm.split(':');
     return run(() => testFullAlarm(childId, periodId, taskId));
   }
+  if(target.dataset.inviteAccept) return run(() => answerInvite(target.dataset.inviteAccept, 'accepted'));
+  if(target.dataset.inviteDecline) return run(() => answerInvite(target.dataset.inviteDecline, 'declined'));
   if(target.dataset.template) return run(() => applyTemplate(target.dataset.template));
 });
 function switchMode(nextMode){

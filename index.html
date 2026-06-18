@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#3d7f91">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Rotina Falante">
-  <link rel="manifest" href="./manifest.webmanifest?v=30">
+  <link rel="manifest" href="./manifest.webmanifest?v=31">
   <link rel="icon" href="./icon-192.png">
   <title>Rotina Falante</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=30">
+  <link rel="stylesheet" href="./styles.css?v=31">
 </head>
 <body>
   <div class="app-shell">
@@ -118,6 +118,30 @@
           </div>
         </section>
 
+        <section class="family-panel">
+          <div class="editor-head">
+            <div>
+              <div class="section-title">Responsáveis</div>
+              <p class="muted">Somente os e-mails liberados acessam este painel. Mudanças importantes aparecem para o outro responsável.</p>
+            </div>
+          </div>
+          <div class="responsible-grid" id="responsibleGrid"></div>
+          <div class="change-notice" id="changeNotice"></div>
+          <div class="invite-box">
+            <div>
+              <div class="section-title">Convite de rotina compartilhada</div>
+              <p class="muted">Use quando uma rotina precisa ser feita pelos dois responsáveis.</p>
+            </div>
+            <div class="invite-form">
+              <select id="inviteTarget"></select>
+              <select id="inviteRoutine"></select>
+              <input id="inviteMessage" placeholder="Mensagem do convite">
+              <button class="primary" id="sendInviteBtn">Enviar convite</button>
+            </div>
+            <div id="inviteList"></div>
+          </div>
+        </section>
+
         <div class="settings-strip">
           <div>
             <div class="section-title">Temas</div>
@@ -202,6 +226,6 @@
     <div class="alarm-overlay" id="alarmOverlay" hidden></div>
   </div>
 
-  <script type="module" src="./app.js?v=29"></script>
+  <script type="module" src="./app.js?v=31"></script>
 </body>
 </html>
