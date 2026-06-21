@@ -105,6 +105,11 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .responsible-card { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; border: 2px solid var(--line); border-radius: 16px; background: #f7fbfb; padding: 10px; }
 .responsible-card.active { border-color: var(--accent); background: rgba(61,127,145,.12); }
 .responsible-avatar { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 14px; background: var(--accent); color: #fff; font-weight: 900; }
+.diagnostic-box { border-top: 2px solid var(--line); padding-top: 12px; margin-top: 12px; }
+.diagnostic-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.diagnostic-item { background: #f7fbfb; border: 2px solid var(--line); border-radius: 14px; padding: 9px 10px; display: grid; gap: 3px; }
+.diagnostic-item span { color: var(--muted); font-size: .78rem; font-weight: 900; text-transform: uppercase; }
+.diagnostic-item strong { font-size: .92rem; overflow-wrap: anywhere; }
 .change-notice { display: grid; gap: 8px; margin: 12px 0; }
 .change-notice .alert-line { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .change-notice span { color: var(--accent); }

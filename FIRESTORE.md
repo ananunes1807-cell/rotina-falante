@@ -1,6 +1,6 @@
 # Rotina Falante - Firestore
 
-Versao atual: v34.
+Versao atual: v34.1.
 
 O app usa Cloud Firestore para sincronizar a rotina da familia entre aparelhos. A tela tambem guarda a ultima atualizacao em `localStorage`, e o Firestore tenta manter cache offline no navegador.
 

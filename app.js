@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp, enableIndexedDb
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v34.1';
 const DEFAULT_FAMILY_CODE = 'familia-ana';
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_x3H6TE',
@@ -131,6 +131,7 @@ let db = null;
 let auth = null;
 let authUser = null;
 let authPersistenceReady = Promise.resolve();
+let redirectHandled = false;
 let firestoreOfflineReady = false;
 let remoteRef = null;
 let unsub = null;
@@ -152,6 +153,7 @@ let timeAnnounceTimer = null;
 let audioContext = null;
 let pendingSpeechTimer = null;
 let pendingChangeReason = '';
+let lastDiagnosticError = localStorage.getItem('rf_lastDiagnosticError') || '';
 
 function loadLocalState(){
   const saved = localStorage.getItem('rf_state');
@@ -294,6 +296,7 @@ async function pushState(){
     setStatus('Salvo no Firebase', true);
     renderSyncInfo();
   }catch(e){
+    rememberDiagnosticError(`Firestore: ${e.code || e.message || 'falha ao salvar'}`);
     setStatus('Sem internet. Mostrando última atualização salva.');
     renderSyncInfo();
   }
@@ -302,6 +305,14 @@ async function pushState(){
 function setStatus(text, ok=false){
   $('syncStatus').textContent = text;
   $('syncStatus').style.color = ok ? 'var(--green)' : 'var(--muted)';
+  renderDiagnostics();
+}
+
+function rememberDiagnosticError(text){
+  lastDiagnosticError = text || '';
+  if(lastDiagnosticError) localStorage.setItem('rf_lastDiagnosticError', lastDiagnosticError);
+  else localStorage.removeItem('rf_lastDiagnosticError');
+  renderDiagnostics();
 }
 
 function renderSyncInfo(){
@@ -310,6 +321,7 @@ function renderSyncInfo(){
   const offlineText = isOnline ? '' : 'Sem internet. Mostrando última atualização salva. ';
   $('syncInfo').textContent = `${offlineText}Última sincronização: ${last}.`;
   $('syncInfo').classList.toggle('offline', !isOnline);
+  renderDiagnostics();
 }
 
 function updateOnlineStatus(){
@@ -317,12 +329,17 @@ function updateOnlineStatus(){
   if(isOnline) setStatus(remoteRef ? 'Online. Sincronizando...' : 'Online');
   else setStatus('Sem internet. Mostrando última atualização salva.');
   renderSyncInfo();
+  renderDiagnostics();
 }
 
 function googleErrorText(error){
   const code = error?.code || 'sem-codigo';
   const message = error?.message ? ` - ${String(error.message).slice(0, 90)}` : '';
   return `Erro Google: ${code}${message}`;
+}
+
+function isMobileDevice(){
+  return matchMedia('(max-width: 780px)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
 function normalizedEmail(email){
@@ -391,6 +408,37 @@ function parseFirebaseConfig(text){
   return Function('"use strict";return (' + match[0] + ');')();
 }
 
+async function handleGoogleUser(user, source='google'){
+  if(!user || !db) return;
+  authUser = user;
+  renderAuthBar();
+  if(!isAuthorizedResponsible(user)){
+    rememberDiagnosticError('E-mail não liberado para o modo família.');
+    setStatus('Este e-mail não está liberado para o modo família');
+    await signOut(auth).catch(()=>{});
+    return;
+  }
+  rememberDiagnosticError('');
+  localStorage.setItem('rf_authMode', 'google');
+  familyCode = cleanFamilyCode($('familyCode')?.value || familyCode || DEFAULT_FAMILY_CODE) || DEFAULT_FAMILY_CODE;
+  localStorage.setItem('rf_familyCode', familyCode);
+  setStatus(source === 'redirect' ? 'Login concluído.' : `Modo família: ${user.email || user.displayName || 'conta Google'}`, true);
+  listenToRemote(responsibleDocRef(), `Modo família: ${user.email || user.displayName || 'conta Google'}`);
+}
+
+async function finishRedirectLogin(){
+  if(!auth || redirectHandled) return;
+  redirectHandled = true;
+  try{
+    const result = await getRedirectResult(auth);
+    if(result?.user) await handleGoogleUser(result.user, 'redirect');
+  }catch(e){
+    const text = googleErrorText(e);
+    rememberDiagnosticError(text);
+    setStatus('Não consegui entrar com Google neste aparelho.');
+  }
+}
+
 function initFirebaseFromForm(){
   const cfgText = firebaseConfigText();
   $('firebaseConfig').value = cfgText;
@@ -407,35 +455,15 @@ function initFirebaseFromForm(){
   if(!auth){
     auth = getAuth(firebaseApp);
     authPersistenceReady = setPersistence(auth, browserLocalPersistence).catch((e) => {
-      setStatus(`Erro Google: ${e.code || 'persistencia'}`);
+      const text = `Erro Google: ${e.code || 'persistencia'}`;
+      rememberDiagnosticError(text);
+      setStatus(text);
     });
     onAuthStateChanged(auth, (user) => {
-      authUser = user;
-      renderAuthBar();
-      if(user && db){
-        if(!isAuthorizedResponsible(user)){
-          setStatus('Este e-mail não está liberado para o modo família');
-          signOut(auth).catch(()=>{});
-          return;
-        }
-        localStorage.setItem('rf_authMode', 'google');
-        listenToRemote(responsibleDocRef(), `Modo família: ${user.email || user.displayName || 'conta Google'}`);
-      }
+      if(user && db) handleGoogleUser(user, 'state');
+      else { authUser = null; renderAuthBar(); renderDiagnostics(); }
     });
-    authPersistenceReady.then(() => getRedirectResult(auth)).then((result) => {
-      if(result?.user && db){
-        authUser = result.user;
-        if(!isAuthorizedResponsible(authUser)){
-          setStatus('Este e-mail não está liberado para o modo família');
-          signOut(auth).catch(()=>{});
-          return;
-        }
-        localStorage.setItem('rf_authMode', 'google');
-        listenToRemote(responsibleDocRef(), `Modo família: ${authUser.email || authUser.displayName || 'conta Google'}`);
-      }
-    }).catch((e) => {
-      setStatus(googleErrorText(e));
-    });
+    authPersistenceReady.then(finishRedirectLogin);
   }
   return cfgText;
 }
@@ -462,7 +490,10 @@ function listenToRemote(ref, label){
     }
     setStatus(snap.metadata.fromCache ? 'Sem internet. Mostrando última atualização salva.' : label, !snap.metadata.fromCache);
     renderSyncInfo();
-  }, () => setStatus('Sem permissão no Firestore'));
+  }, (e) => {
+    rememberDiagnosticError(`Firestore: ${e.code || e.message || 'sem permissão'}`);
+    setStatus('Sem permissão no Firestore');
+  });
   $('setupPanel').hidden = true;
   $('modePanel').hidden = false;
   renderAll();
@@ -477,6 +508,7 @@ async function connectFirebase(){
     localStorage.setItem('rf_familyCode', familyCode);
     listenToRemote(doc(db, 'familias', familyCode, 'plataforma', 'principal'), 'Conectado ao Firestore');
   }catch(e){
+    rememberDiagnosticError(`Firestore: ${e.code || e.message || 'configuração'}`);
     setStatus('Confira firebaseConfig, código e regras');
   }
 }
@@ -486,29 +518,30 @@ async function loginGoogle(){
     initFirebaseFromForm();
     await authPersistenceReady;
     localStorage.setItem('rf_authMode', 'google');
+    familyCode = cleanFamilyCode($('familyCode')?.value || familyCode || DEFAULT_FAMILY_CODE) || DEFAULT_FAMILY_CODE;
+    localStorage.setItem('rf_familyCode', familyCode);
+    setStatus('Abrindo login do Google...');
+    rememberDiagnosticError('');
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-    const isMobile = matchMedia('(max-width: 780px)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if(isMobile){
+    if(isMobileDevice()){
       await signInWithRedirect(auth, provider);
       return;
     }
     try{
       await signInWithPopup(auth, provider);
     }catch(e){
+      setStatus('Abrindo login do Google...');
       await signInWithRedirect(auth, provider);
       return;
     }
-    authUser = auth.currentUser;
-    if(!authUser) throw new Error('auth');
-    if(!isAuthorizedResponsible(authUser)){
-      await signOut(auth).catch(()=>{});
-      throw new Error('email-nao-liberado');
-    }
-    localStorage.setItem('rf_authMode', 'google');
-    listenToRemote(responsibleDocRef(), `Modo família: ${authUser.email || authUser.displayName || 'conta Google'}`);
+    if(!auth.currentUser) throw new Error('auth');
+    await handleGoogleUser(auth.currentUser, 'popup');
+    setStatus('Login concluído.', true);
   }catch(e){
-    setStatus(googleErrorText(e));
+    const text = googleErrorText(e);
+    rememberDiagnosticError(text);
+    setStatus('Não consegui entrar com Google neste aparelho.');
   }
 }
 
@@ -524,6 +557,27 @@ function renderAuthBar(){
   if(!$('authBar')) return;
   $('authBar').hidden = !authUser;
   if(authUser) $('authUserLabel').textContent = `Google: ${authUser.email || authUser.displayName || 'conectado'}`;
+  renderDiagnostics();
+}
+
+function renderDiagnostics(){
+  if(!$('diagnosticGrid')) return;
+  const last = appState.lastSyncedAt ? formatShortDate(appState.lastSyncedAt) : 'ainda sem sincronização';
+  const user = authUser?.email || authUser?.displayName || 'sem login';
+  const rows = [
+    ['Versão', APP_VERSION],
+    ['Usuário', user],
+    ['Conexão', isOnline ? 'online' : 'offline'],
+    ['Família', familyCode || DEFAULT_FAMILY_CODE],
+    ['Última sincronização', last],
+    ['Último erro', lastDiagnosticError || 'nenhum']
+  ];
+  $('diagnosticGrid').innerHTML = rows.map(([label, value]) => `
+    <div class="diagnostic-item">
+      <span>${label}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `).join('');
 }
 
 function cleanFamilyCode(code){
@@ -747,6 +801,7 @@ function renderFamilyPanel(){
       </div>
     </div>
   `).join('');
+  renderDiagnostics();
   const changes = (appState.family?.changes || []).filter(change => change.by !== me).slice(-3).reverse();
   $('changeNotice').innerHTML = changes.length ? changes.map(change => `
     <div class="alert-line">
