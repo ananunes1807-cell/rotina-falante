@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp, enableIndexedDb
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v34.1';
+const APP_VERSION = 'v34.2';
 const DEFAULT_FAMILY_CODE = 'familia-ana';
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_x3H6TE',
@@ -154,6 +154,12 @@ let audioContext = null;
 let pendingSpeechTimer = null;
 let pendingChangeReason = '';
 let lastDiagnosticError = localStorage.getItem('rf_lastDiagnosticError') || '';
+let authChecking = true;
+let authStateChecked = false;
+let authStateLastAt = localStorage.getItem('rf_authStateLastAt') || '';
+let redirectResultStatus = localStorage.getItem('rf_redirectResultStatus') || 'ainda não conferido';
+let lastLoginErrorCode = localStorage.getItem('rf_lastLoginErrorCode') || '';
+let lastLoginErrorMessage = localStorage.getItem('rf_lastLoginErrorMessage') || '';
 
 function loadLocalState(){
   const saved = localStorage.getItem('rf_state');
@@ -338,8 +344,46 @@ function googleErrorText(error){
   return `Erro Google: ${code}${message}`;
 }
 
+function rememberLoginError(error){
+  lastLoginErrorCode = error?.code || 'sem-codigo';
+  lastLoginErrorMessage = error?.message || String(error || 'Erro desconhecido');
+  localStorage.setItem('rf_lastLoginErrorCode', lastLoginErrorCode);
+  localStorage.setItem('rf_lastLoginErrorMessage', lastLoginErrorMessage);
+  rememberDiagnosticError(`Login: ${lastLoginErrorCode} - ${lastLoginErrorMessage.slice(0, 90)}`);
+}
+
+function clearLoginError(){
+  lastLoginErrorCode = '';
+  lastLoginErrorMessage = '';
+  localStorage.removeItem('rf_lastLoginErrorCode');
+  localStorage.removeItem('rf_lastLoginErrorMessage');
+}
+
+function setRedirectResultStatus(text){
+  redirectResultStatus = text || 'sem informação';
+  localStorage.setItem('rf_redirectResultStatus', redirectResultStatus);
+  renderDiagnostics();
+}
+
+function markRedirectStarted(){
+  const now = new Date().toISOString();
+  localStorage.setItem('loginRedirectStarted', 'true');
+  localStorage.setItem('loginRedirectAt', now);
+  setRedirectResultStatus(`redirect iniciado em ${formatShortDate(now)}`);
+}
+
+function clearRedirectStarted(){
+  localStorage.removeItem('loginRedirectStarted');
+  localStorage.removeItem('loginRedirectAt');
+}
+
 function isMobileDevice(){
   return matchMedia('(max-width: 780px)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+function appDisplayMode(){
+  const standalone = matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  return standalone ? 'PWA instalado' : 'navegador normal';
 }
 
 function normalizedEmail(email){
@@ -411,6 +455,7 @@ function parseFirebaseConfig(text){
 async function handleGoogleUser(user, source='google'){
   if(!user || !db) return;
   authUser = user;
+  authChecking = false;
   renderAuthBar();
   if(!isAuthorizedResponsible(user)){
     rememberDiagnosticError('E-mail não liberado para o modo família.');
@@ -419,6 +464,8 @@ async function handleGoogleUser(user, source='google'){
     return;
   }
   rememberDiagnosticError('');
+  clearLoginError();
+  clearRedirectStarted();
   localStorage.setItem('rf_authMode', 'google');
   familyCode = cleanFamilyCode($('familyCode')?.value || familyCode || DEFAULT_FAMILY_CODE) || DEFAULT_FAMILY_CODE;
   localStorage.setItem('rf_familyCode', familyCode);
@@ -429,12 +476,32 @@ async function handleGoogleUser(user, source='google'){
 async function finishRedirectLogin(){
   if(!auth || redirectHandled) return;
   redirectHandled = true;
+  authChecking = true;
+  renderAuthBar();
+  const hadRedirect = localStorage.getItem('loginRedirectStarted') === 'true';
+  setStatus(hadRedirect ? 'Voltamos do Google, conferindo login...' : 'Verificando login Google...');
   try{
     const result = await getRedirectResult(auth);
-    if(result?.user) await handleGoogleUser(result.user, 'redirect');
+    if(result?.user){
+      setRedirectResultStatus(`usuário retornou: ${result.user.email || result.user.displayName || result.user.uid}`);
+      await handleGoogleUser(result.user, 'redirect');
+      return;
+    }
+    setRedirectResultStatus('getRedirectResult retornou vazio');
+    if(auth.currentUser){
+      await handleGoogleUser(auth.currentUser, 'state');
+      return;
+    }
+    authChecking = false;
+    authUser = null;
+    renderAuthBar();
+    setStatus(hadRedirect ? 'Não encontrei login Google após o retorno.' : 'Sem login Google.');
   }catch(e){
-    const text = googleErrorText(e);
-    rememberDiagnosticError(text);
+    rememberLoginError(e);
+    setRedirectResultStatus(`erro: ${e.code || e.message || 'redirect'}`);
+    authChecking = false;
+    authUser = null;
+    renderAuthBar();
     setStatus('Não consegui entrar com Google neste aparelho.');
   }
 }
@@ -454,14 +521,29 @@ function initFirebaseFromForm(){
   }
   if(!auth){
     auth = getAuth(firebaseApp);
+    authChecking = true;
+    renderAuthBar();
     authPersistenceReady = setPersistence(auth, browserLocalPersistence).catch((e) => {
       const text = `Erro Google: ${e.code || 'persistencia'}`;
+      rememberLoginError(e);
       rememberDiagnosticError(text);
       setStatus(text);
     });
     onAuthStateChanged(auth, (user) => {
+      authStateChecked = true;
+      authStateLastAt = new Date().toISOString();
+      localStorage.setItem('rf_authStateLastAt', authStateLastAt);
       if(user && db) handleGoogleUser(user, 'state');
-      else { authUser = null; renderAuthBar(); renderDiagnostics(); }
+      else if(redirectHandled){
+        authChecking = false;
+        authUser = null;
+        renderAuthBar();
+        renderDiagnostics();
+      }else{
+        authChecking = true;
+        renderAuthBar();
+        renderDiagnostics();
+      }
     });
     authPersistenceReady.then(finishRedirectLogin);
   }
@@ -520,11 +602,15 @@ async function loginGoogle(){
     localStorage.setItem('rf_authMode', 'google');
     familyCode = cleanFamilyCode($('familyCode')?.value || familyCode || DEFAULT_FAMILY_CODE) || DEFAULT_FAMILY_CODE;
     localStorage.setItem('rf_familyCode', familyCode);
+    authChecking = true;
+    renderAuthBar();
     setStatus('Abrindo login do Google...');
     rememberDiagnosticError('');
+    clearLoginError();
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     if(isMobileDevice()){
+      markRedirectStarted();
       await signInWithRedirect(auth, provider);
       return;
     }
@@ -532,6 +618,7 @@ async function loginGoogle(){
       await signInWithPopup(auth, provider);
     }catch(e){
       setStatus('Abrindo login do Google...');
+      markRedirectStarted();
       await signInWithRedirect(auth, provider);
       return;
     }
@@ -539,8 +626,9 @@ async function loginGoogle(){
     await handleGoogleUser(auth.currentUser, 'popup');
     setStatus('Login concluído.', true);
   }catch(e){
-    const text = googleErrorText(e);
-    rememberDiagnosticError(text);
+    rememberLoginError(e);
+    authChecking = false;
+    renderAuthBar();
     setStatus('Não consegui entrar com Google neste aparelho.');
   }
 }
@@ -555,8 +643,12 @@ async function logoutGoogle(){
 
 function renderAuthBar(){
   if(!$('authBar')) return;
-  $('authBar').hidden = !authUser;
+  $('authBar').hidden = false;
   if(authUser) $('authUserLabel').textContent = `Google: ${authUser.email || authUser.displayName || 'conectado'}`;
+  else if(authChecking) $('authUserLabel').textContent = 'Verificando login Google...';
+  else $('authUserLabel').textContent = 'Sem login Google';
+  if($('logoutBtn')) $('logoutBtn').hidden = !authUser;
+  if($('retryGoogleBtn')) $('retryGoogleBtn').hidden = !!authUser || authChecking;
   renderDiagnostics();
 }
 
@@ -564,13 +656,25 @@ function renderDiagnostics(){
   if(!$('diagnosticGrid')) return;
   const last = appState.lastSyncedAt ? formatShortDate(appState.lastSyncedAt) : 'ainda sem sincronização';
   const user = authUser?.email || authUser?.displayName || 'sem login';
+  const currentUser = auth?.currentUser ? (auth.currentUser.email || auth.currentUser.displayName || auth.currentUser.uid) : 'não';
+  const redirectStarted = localStorage.getItem('loginRedirectStarted') === 'true' ? 'sim' : 'não';
+  const redirectAt = localStorage.getItem('loginRedirectAt') || '';
+  const loginError = lastLoginErrorCode ? `${lastLoginErrorCode}: ${lastLoginErrorMessage}` : 'nenhum';
   const rows = [
     ['Versão', APP_VERSION],
     ['Usuário', user],
+    ['auth.currentUser', currentUser],
+    ['getRedirectResult', redirectResultStatus],
+    ['onAuthStateChanged', authStateChecked ? `sim, ${formatShortDate(authStateLastAt)}` : 'ainda não'],
+    ['Redirect iniciado', redirectAt ? `${redirectStarted}, ${formatShortDate(redirectAt)}` : redirectStarted],
+    ['URL atual', location.href],
+    ['Navegador mobile', isMobileDevice() ? 'sim' : 'não'],
+    ['Modo de abertura', appDisplayMode()],
     ['Conexão', isOnline ? 'online' : 'offline'],
     ['Família', familyCode || DEFAULT_FAMILY_CODE],
     ['Última sincronização', last],
-    ['Último erro', lastDiagnosticError || 'nenhum']
+    ['Último erro login', loginError],
+    ['Último erro Firestore/app', lastDiagnosticError || 'nenhum']
   ];
   $('diagnosticGrid').innerHTML = rows.map(([label, value]) => `
     <div class="diagnostic-item">
@@ -1892,6 +1996,7 @@ $('familyCode').value = familyCode;
 $('momPin').value = momPin;
 $('connectBtn').addEventListener('click', connectFirebase);
 $('googleLoginBtn').addEventListener('click', loginGoogle);
+$('retryGoogleBtn').addEventListener('click', loginGoogle);
 $('logoutBtn').addEventListener('click', logoutGoogle);
 $('clearConfigBtn').addEventListener('click', clearConfig);
 $('addChildBtn').addEventListener('click', addChild);

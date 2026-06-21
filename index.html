@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#3d7f91">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Rotina Falante">
-  <link rel="manifest" href="./manifest.webmanifest?v=34.1">
+  <link rel="manifest" href="./manifest.webmanifest?v=34.2">
   <link rel="icon" href="./icon-192.png">
   <title>Rotina Falante</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=34.1">
+  <link rel="stylesheet" href="./styles.css?v=34.2">
 </head>
 <body>
   <div class="app-shell">
@@ -52,7 +52,8 @@
           <button data-mode="child">Modo criança</button>
         </div>
         <div class="auth-bar" id="authBar" hidden>
-          <span id="authUserLabel">Sem login Google</span>
+          <span id="authUserLabel">Verificando login Google...</span>
+          <button class="primary small-btn" id="retryGoogleBtn" hidden>Tentar login Google novamente</button>
           <button class="secondary small-btn" id="logoutBtn">Sair</button>
         </div>
         <div class="sync-info" id="syncInfo">Última sincronização: ainda sem sincronização.</div>
@@ -266,6 +267,6 @@
     <div class="alarm-overlay" id="alarmOverlay" hidden></div>
   </div>
 
-  <script type="module" src="./app.js?v=34.1"></script>
+  <script type="module" src="./app.js?v=34.2"></script>
 </body>
 </html>
