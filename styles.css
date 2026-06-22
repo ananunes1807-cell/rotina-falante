@@ -78,6 +78,7 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .responsible-tabs button { background: var(--surface); border: 2px solid var(--line); color: var(--muted); }
 .responsible-tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .responsible-routine-panel { margin-bottom: 14px; }
+.my-responsible-card { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; background: #f7fbfb; border: 2px solid var(--line); border-radius: 16px; padding: 12px; margin: 10px 0; }
 .calendar-toolbar { display: grid; grid-template-columns: minmax(160px, .8fr) minmax(160px, .8fr) minmax(160px, .8fr) minmax(160px, .8fr); gap: 8px; margin: 10px 0; }
 .responsible-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
 .responsible-summary div { background: #f7fbfb; border: 2px solid var(--line); border-radius: 16px; padding: 12px; text-align: center; }
@@ -184,6 +185,14 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .profile-detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .profile-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(170px, .6fr) minmax(110px, .35fr); gap: 8px; }
 .profile-detail-grid label { margin: 0; }
+.responsible-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, .55fr) minmax(160px, .55fr); gap: 8px; margin-top: 12px; }
+.responsible-detail-grid label { margin: 0; }
+.responsible-check { align-self: end; min-height: 48px; padding: 10px; border: 2px solid var(--line); border-radius: 12px; background: #f7fbfb; }
+.responsible-notes { min-height: 78px; font-family: inherit; }
+.linked-children-box { margin-top: 10px; border: 2px solid var(--line); border-radius: 14px; padding: 10px; background: rgba(255,255,255,.68); }
+.linked-children-list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.linked-child-option { display: inline-flex; gap: 6px; align-items: center; margin: 0; padding: 8px 10px; border: 2px solid var(--line); border-radius: 999px; background: #f7fbfb; color: var(--text); text-transform: none; font-size: .9rem; }
+.linked-child-option input { width: auto; }
 .calendar-title { font-weight: 900; margin-bottom: 10px; }
 .calendar-week, .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .calendar-week span { color: var(--muted); font-size: .78rem; font-weight: 900; text-align: center; }
@@ -272,7 +281,7 @@ body.child-theme-active .primary, body.child-theme-active .secondary { border-ra
 .danger { color: var(--red); border-color: rgba(216,85,85,.35); }
 @media (max-width: 680px) {
   .mom-menu { grid-template-columns: 1fr; }
-  .mom-dashboard, .mom-tools, .copy-grid, .invite-form, .invite-item, .protected-form, .message-form, .calendar-toolbar, .calendar-event-form, .calendar-event-card { grid-template-columns: 1fr; }
+  .mom-dashboard, .mom-tools, .copy-grid, .invite-form, .invite-item, .protected-form, .message-form, .calendar-toolbar, .calendar-event-form, .calendar-event-card, .my-responsible-card { grid-template-columns: 1fr; }
   .responsible-tabs { grid-template-columns: 1fr; }
   .responsible-summary { grid-template-columns: 1fr 1fr; }
   .calendar-event-card .task-actions { justify-content: stretch; }
@@ -280,6 +289,7 @@ body.child-theme-active .primary, body.child-theme-active .secondary { border-ra
   .agenda-row { grid-template-columns: 70px minmax(0, 1fr); }
   .agenda-row button { width: 100%; }
   .task-form { grid-template-columns: 62px 1fr; }
+  .responsible-detail-grid { grid-template-columns: 1fr; }
   .sound-row { grid-template-columns: 1fr; }
   .profile-detail-grid { grid-template-columns: 1fr; }
   .task-form button, .task-form input[type=time] { grid-column: span 1; }

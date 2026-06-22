@@ -1,6 +1,6 @@
 # Rotina Falante - Firestore
 
-Versao atual: v35.
+Versao atual: v35.1.
 
 O app usa Cloud Firestore para sincronizar a rotina da familia entre aparelhos. A tela tambem guarda a ultima atualizacao em `localStorage`, e o Firestore tenta manter cache offline no navegador.
 
@@ -38,6 +38,31 @@ A v35 usa estes papeis no app:
 
 O `admin_ti` pode ver e editar criancas, responsaveis, rotinas, recados, eventos, configuracoes e testes. Responsaveis comuns nao devem alterar permissoes nem dados de outras contas.
 
+## Perfis de responsaveis
+
+A v35.1 transforma responsaveis em perfis reais dentro de `state.children` com `type: "mom"`.
+
+```js
+{
+  id: "uuid",
+  type: "mom",
+  name: "Ana Carolina",
+  avatar: "☕",
+  email: "anacarolinamoraisdosreis@gmail.com",
+  uid: "uid-do-google-quando-ja-logou",
+  role: "admin_ti", // admin_ti, responsavel ou apoio
+  notes: "Observacoes internas",
+  canViewChildren: true,
+  linkedChildIds: ["id-da-crianca"],
+  routines: { manha: [], tarde: [], noite: [] },
+  done: {}
+}
+```
+
+Quando um responsavel e cadastrado por e-mail antes de entrar com Google, o `uid` fica vazio. No primeiro login com aquele e-mail, o app vincula o `uid` ao perfil.
+
+A conta `anacarolinamoraisdosreis@gmail.com` sempre volta para `role: "admin_ti"` e nao deve ser removida pelo app.
+
 ## Calendario interno
 
 Os eventos da aba **Minha rotina** ficam em:
@@ -48,6 +73,8 @@ state.calendarEvents: [
     id: "uuid",
     ownerUid: "uid-do-responsavel",
     ownerEmail: "email@exemplo.com",
+    ownerName: "Nome do responsavel",
+    responsibleId: "id-do-perfil-responsavel",
     title: "Consulta",
     description: "Descricao curta",
     date: "2026-06-21",

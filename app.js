@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp, enableIndexedDb
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v35';
+const APP_VERSION = 'v35.1';
 const DEFAULT_FAMILY_CODE = 'familia-ana';
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_x3H6TE',
@@ -19,6 +19,11 @@ const RESPONSIBLE_EMAILS = [
   'carlionison.43@gmail.com'
 ];
 const ADMIN_TI_EMAILS = ['anacarolinamoraisdosreis@gmail.com'];
+const responsibleRoles = [
+  { id:'admin_ti', label:'Admin TI' },
+  { id:'responsavel', label:'Responsável' },
+  { id:'apoio', label:'Apoio' }
+];
 const eventTypes = [
   { id:'pessoal', label:'Pessoal', emoji:'💙' },
   { id:'crianca', label:'Criança', emoji:'🧒' },
@@ -215,14 +220,32 @@ function emptyMessage(childId){
   };
 }
 
+function defaultResponsibleProfile(email=''){
+  const normalized = normalizedEmail(email);
+  const admin = ADMIN_TI_EMAILS.includes(normalized);
+  return {
+    id: crypto.randomUUID(),
+    type: 'mom',
+    name: normalized ? responsibleNameFromEmail(normalized) : 'Responsável',
+    birthDate: '',
+    avatar: admin ? '☕' : '🤝',
+    profileTheme: 'mae',
+    routines: emptyRoutines(),
+    done: {},
+    email: normalized,
+    role: admin ? 'admin_ti' : 'responsavel',
+    notes: '',
+    canViewChildren: admin,
+    linkedChildIds: [],
+    uid: ''
+  };
+}
+
 function normalizeState(state){
   state.theme ||= 'ceu';
   state.family ||= {};
   state.family.code ||= DEFAULT_FAMILY_CODE;
-  state.family.responsibles = RESPONSIBLE_EMAILS.map(email => ({
-    email,
-    name: state.family?.responsibles?.find(item => item.email === email)?.name || responsibleNameFromEmail(email)
-  }));
+  const previousResponsibles = Array.isArray(state.family?.responsibles) ? state.family.responsibles : [];
   state.family.changes = Array.isArray(state.family.changes) ? state.family.changes.slice(-12) : [];
   state.family.invites = Array.isArray(state.family.invites) ? state.family.invites.slice(-12) : [];
   state.childProtection ||= { enabled: false, childId: '' };
@@ -235,7 +258,17 @@ function normalizeState(state){
   state.lastSyncedAt ||= '';
   state.children = Array.isArray(state.children) ? state.children : [];
   if(!state.children.length) state.children.push({ id: crypto.randomUUID(), type:'child', name:'Criança', birthDate:'', avatar:'⭐', profileTheme:'bichinhos', routines: emptyRoutines(), done:{} });
-  if(!state.children.some(child => child.type === 'mom')) state.children.push({ id: crypto.randomUUID(), type:'mom', name:'Responsável', birthDate:'', avatar:'☕', profileTheme:'mae', routines: emptyRoutines(), done:{} });
+  RESPONSIBLE_EMAILS.forEach(email => {
+    const normalized = normalizedEmail(email);
+    const existing = state.children.find(child => child.type === 'mom' && normalizedEmail(child.email) === normalized);
+    const previous = previousResponsibles.find(item => normalizedEmail(item.email) === normalized);
+    if(!existing){
+      const profile = defaultResponsibleProfile(normalized);
+      if(previous?.name) profile.name = previous.name;
+      state.children.push(profile);
+    }
+  });
+  if(!state.children.some(child => child.type === 'mom')) state.children.push(defaultResponsibleProfile());
   state.children.forEach(child => {
     child.id ||= crypto.randomUUID();
     child.name ||= 'Criança';
@@ -245,6 +278,15 @@ function normalizeState(state){
     delete child.age;
     child.avatar ||= '⭐';
     child.profileTheme ||= child.type === 'mom' ? 'mae' : 'bichinhos';
+    if(child.type === 'mom'){
+      child.email = normalizedEmail(child.email);
+      child.role = ADMIN_TI_EMAILS.includes(child.email) ? 'admin_ti' : (responsibleRoles.some(role => role.id === child.role) ? child.role : 'responsavel');
+      child.notes ||= '';
+      child.canViewChildren = ADMIN_TI_EMAILS.includes(child.email) ? true : !!child.canViewChildren;
+      child.linkedChildIds = Array.isArray(child.linkedChildIds) ? child.linkedChildIds : [];
+      child.uid ||= '';
+      child.avatar ||= child.role === 'admin_ti' ? '☕' : '🤝';
+    }
     child.alarmSound ||= 'suave';
     child.stars = Number(child.stars || 0);
     child.routines ||= emptyRoutines();
@@ -259,6 +301,19 @@ function normalizeState(state){
       task.important = !!task.important;
     }));
   });
+  state.family.responsibles = state.children
+    .filter(child => child.type === 'mom')
+    .map(profile => ({
+      id: profile.id,
+      uid: profile.uid || '',
+      email: normalizedEmail(profile.email),
+      name: profile.name,
+      avatar: profile.avatar,
+      role: profile.role || 'responsavel',
+      notes: profile.notes || '',
+      canViewChildren: !!profile.canViewChildren,
+      linkedChildIds: profile.linkedChildIds || []
+    }));
   return state;
 }
 
@@ -266,6 +321,8 @@ function normalizeCalendarEvent(event){
   event.id ||= crypto.randomUUID();
   event.ownerUid ||= '';
   event.ownerEmail = normalizedEmail(event.ownerEmail);
+  event.ownerName ||= event.ownerEmail ? responsibleNameFromEmail(event.ownerEmail) : '';
+  event.responsibleId ||= '';
   event.title ||= 'Evento';
   event.description ||= '';
   event.date ||= todayKey();
@@ -435,12 +492,16 @@ function currentResponsibleEmail(){
 }
 
 function isAuthorizedResponsible(user=authUser){
-  return RESPONSIBLE_EMAILS.includes(normalizedEmail(user?.email));
+  const email = normalizedEmail(user?.email);
+  return RESPONSIBLE_EMAILS.includes(email) || momProfiles().some(profile => normalizedEmail(profile.email) === email);
 }
 
 function currentUserRole(user=authUser){
   if(!user) return 'child';
-  return ADMIN_TI_EMAILS.includes(normalizedEmail(user.email)) ? 'admin_ti' : 'responsavel';
+  const email = normalizedEmail(user.email);
+  if(ADMIN_TI_EMAILS.includes(email)) return 'admin_ti';
+  const profile = responsibleProfileForUser(user);
+  return profile?.role || 'responsavel';
 }
 
 function isAdminTi(user=authUser){
@@ -449,6 +510,40 @@ function isAdminTi(user=authUser){
 
 function currentOwnerUid(){
   return authUser?.uid || `email:${currentResponsibleEmail() || 'local'}`;
+}
+
+function responsibleProfileForUser(user=authUser){
+  if(!user) return null;
+  const email = normalizedEmail(user.email);
+  return momProfiles().find(profile => profile.uid && profile.uid === user.uid)
+    || momProfiles().find(profile => normalizedEmail(profile.email) === email)
+    || null;
+}
+
+function selectedResponsibleForCalendar(){
+  const selected = $('calendarOwnerFilter')?.value || 'mine';
+  if(isAdminTi() && selected && !['mine','all'].includes(selected)){
+    return momProfiles().find(profile => normalizedEmail(profile.email) === selected || profile.id === selected) || responsibleProfileForUser() || momProfile();
+  }
+  return responsibleProfileForUser() || momProfile();
+}
+
+function linkLoggedResponsible(user){
+  if(!user) return;
+  let profile = responsibleProfileForUser(user);
+  if(!profile && isAdminTi(user)) {
+    profile = momProfile();
+    profile.email = normalizedEmail(user.email);
+    profile.role = 'admin_ti';
+  }
+  if(!profile) return;
+  profile.uid = user.uid || profile.uid || '';
+  profile.email = normalizedEmail(profile.email || user.email);
+  profile.name = profile.name || user.displayName || responsibleNameFromEmail(profile.email);
+  if(ADMIN_TI_EMAILS.includes(profile.email)) {
+    profile.role = 'admin_ti';
+    profile.canViewChildren = true;
+  }
 }
 
 function responsibleDocRef(){
@@ -501,6 +596,7 @@ function parseFirebaseConfig(text){
 async function handleGoogleUser(user, source='google'){
   if(!user || !db) return;
   authUser = user;
+  linkLoggedResponsible(user);
   authChecking = false;
   renderAuthBar();
   if(!isAuthorizedResponsible(user)){
@@ -741,6 +837,14 @@ function childProfiles(){
   return appState.children.filter(child => child.type !== 'mom');
 }
 
+function momProfiles(){
+  return appState.children.filter(child => child.type === 'mom');
+}
+
+function principalAdminProfile(){
+  return momProfiles().find(profile => ADMIN_TI_EMAILS.includes(normalizedEmail(profile.email))) || momProfiles()[0] || null;
+}
+
 function isChildProtectionOn(){
   return !!appState.childProtection?.enabled;
 }
@@ -751,9 +855,9 @@ function protectedChild(){
 }
 
 function momProfile(){
-  let profile = appState.children.find(child => child.type === 'mom');
+  let profile = principalAdminProfile();
   if(!profile){
-    profile = { id: crypto.randomUUID(), type:'mom', name:'Responsável', birthDate:'', avatar:'☕', profileTheme:'mae', routines: emptyRoutines(), done:{} };
+    profile = defaultResponsibleProfile(ADMIN_TI_EMAILS[0] || '');
     appState.children.push(profile);
   }
   return profile;
@@ -821,8 +925,9 @@ function renderMom(){
   renderMomTools();
   renderFamilyPanel();
   $('profilesTitle').textContent = inMomTab ? 'Rotina dos responsáveis' : 'Filhos e rotinas';
-  $('profilesHint').textContent = inMomTab ? 'Edite nome, emoji e alarmes dos responsáveis. Essa rotina toca separada das crianças.' : 'Edite aqui. Os aparelhos das crianças atualizam automaticamente.';
-  $('addChildBtn').hidden = inMomTab;
+  $('profilesHint').textContent = inMomTab ? 'Cadastre responsáveis, permissões, rotina própria e vínculos com crianças.' : 'Edite aqui. Os aparelhos das crianças atualizam automaticamente.';
+  $('addChildBtn').hidden = false;
+  $('addChildBtn').textContent = inMomTab ? 'Adicionar responsável' : 'Adicionar filho';
   document.querySelectorAll('[data-profile-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.profileTab === selectedProfileTab);
     btn.onclick = () => {
@@ -831,16 +936,15 @@ function renderMom(){
       renderMom();
     };
   });
-  const visibleProfiles = inMomTab ? [momProfile()] : childProfiles();
-  if(inMomTab) editingChildId = visibleProfiles[0].id;
+  const visibleProfiles = inMomTab ? momProfiles() : childProfiles();
   $('childrenGrid').innerHTML = visibleProfiles.map(child => `
     <button class="profile-tile ${editingChildId===child.id?'active':''} profile-card-${child.type}" style="--tile-profile-bg:${profileThemeById(child.profileTheme).bg}" data-open-profile="${child.id}">
       <div class="profile-tile-avatar">${child.avatar}</div>
       <div class="profile-tile-name">${child.name}</div>
-      <div class="profile-tile-meta">${child.type === 'mom' ? 'Rotina da família' : ageText(child)}</div>
+      <div class="profile-tile-meta">${child.type === 'mom' ? `${roleLabel(child.role)} · ${child.email || 'sem e-mail'}` : ageText(child)}</div>
     </button>
   `).join('');
-  if(!inMomTab && editingChildId && !visibleProfiles.some(child => child.id === editingChildId)) editingChildId = '';
+  if(editingChildId && !visibleProfiles.some(child => child.id === editingChildId)) editingChildId = '';
   bindChildCards();
   if(editingChildId) renderEditor();
   else $('routineEditor').hidden = true;
@@ -869,12 +973,16 @@ function renderAdminVisibility(){
 
 function responsibleOptions(){
   const known = new Map();
-  RESPONSIBLE_EMAILS.forEach(email => known.set(email, { email, label: responsibleNameFromEmail(email), uid: '' }));
+  momProfiles().forEach(profile => known.set(profile.email || profile.id, { id: profile.id, email: normalizedEmail(profile.email), label: profile.name, uid: profile.uid || '', role: profile.role || 'responsavel' }));
   (appState.calendarEvents || []).forEach(event => {
     const email = normalizedEmail(event.ownerEmail);
-    if(email && !known.has(email)) known.set(email, { email, label: responsibleNameFromEmail(email), uid: event.ownerUid || '' });
+    if(email && !known.has(email)) known.set(email, { id: event.responsibleId || '', email, label: event.ownerName || responsibleNameFromEmail(email), uid: event.ownerUid || '', role: 'responsavel' });
   });
   return Array.from(known.values());
+}
+
+function roleLabel(role){
+  return responsibleRoles.find(item => item.id === role)?.label || 'Responsável';
 }
 
 function eventTypeById(id){
@@ -885,14 +993,16 @@ function canSeeCalendarEvent(event){
   if(isAdminTi()) return true;
   const uid = currentOwnerUid();
   const email = currentResponsibleEmail();
-  return event.ownerUid === uid || normalizedEmail(event.ownerEmail) === email || (event.sharedWithEmails || []).includes(email);
+  const profile = responsibleProfileForUser();
+  return event.responsibleId === profile?.id || event.ownerUid === uid || normalizedEmail(event.ownerEmail) === email || (event.sharedWithEmails || []).includes(email);
 }
 
 function canEditCalendarEvent(event){
   if(isAdminTi()) return true;
   const uid = currentOwnerUid();
   const email = currentResponsibleEmail();
-  return event.ownerUid === uid || normalizedEmail(event.ownerEmail) === email || event.createdByUid === uid;
+  const profile = responsibleProfileForUser();
+  return event.responsibleId === profile?.id || event.ownerUid === uid || normalizedEmail(event.ownerEmail) === email || event.createdByUid === uid;
 }
 
 function filteredCalendarEvents(){
@@ -920,16 +1030,28 @@ function renderResponsibleRoutine(){
   const childSelected = $('calendarChildFilter')?.value || 'all';
   const typeSelected = $('calendarTypeFilter')?.value || 'all';
   const role = currentUserRole();
-  const userName = authUser?.displayName || responsibleNameFromEmail(currentResponsibleEmail()) || 'Responsável';
+  const viewedResponsible = selectedResponsibleForCalendar();
+  const userName = isAdminTi() ? (viewedResponsible?.name || 'Todos responsáveis') : (authUser?.displayName || responsibleNameFromEmail(currentResponsibleEmail()) || 'Responsável');
   $('responsibleRoutineIntro').textContent = `${userName} · ${role === 'admin_ti' ? 'admin com acesso total' : 'responsável'} · ${formatLongDate(selectedCalendarDate)}`;
+  if($('myResponsibleCard')){
+    const linked = viewedResponsible?.linkedChildIds?.length || 0;
+    $('myResponsibleCard').innerHTML = viewedResponsible ? `
+      <div class="responsible-avatar">${viewedResponsible.avatar || '🤝'}</div>
+      <div>
+        <div class="task-name">${escapeHtml(viewedResponsible.name)}</div>
+        <div class="task-time">${escapeHtml(viewedResponsible.email || 'sem e-mail')} · ${roleLabel(viewedResponsible.role)}</div>
+        <div class="task-time">${viewedResponsible.canViewChildren ? `Pode ver crianças · ${linked} vínculo(s)` : 'Sem acesso às crianças'}</div>
+      </div>
+    ` : '<div class="muted">Perfil do responsável não encontrado.</div>';
+  }
   $('calendarDate').value = selectedCalendarDate;
   $('eventType').innerHTML = eventTypes.map(type => `<option value="${type.id}">${type.emoji} ${type.label}</option>`).join('');
   $('calendarTypeFilter').innerHTML = '<option value="all">Todos os tipos</option>' + eventTypes.map(type => `<option value="${type.id}">${type.emoji} ${type.label}</option>`).join('');
   $('calendarTypeFilter').value = eventTypes.some(type => type.id === typeSelected) ? typeSelected : 'all';
   const responsibles = responsibleOptions();
   $('calendarOwnerFilter').hidden = !isAdminTi();
-  $('calendarOwnerFilter').innerHTML = '<option value="mine">Meus eventos</option><option value="all">Todos responsáveis</option>' + responsibles.map(item => `<option value="${item.email}">${escapeHtml(item.label)}</option>`).join('');
-  $('calendarOwnerFilter').value = ownerSelected === 'all' || ownerSelected === 'mine' || responsibles.some(item => item.email === ownerSelected) ? ownerSelected : 'mine';
+  $('calendarOwnerFilter').innerHTML = '<option value="mine">Meus eventos</option><option value="all">Todos responsáveis</option>' + responsibles.map(item => `<option value="${escapeAttr(item.email || item.id)}">${escapeHtml(item.label)} · ${roleLabel(item.role)}</option>`).join('');
+  $('calendarOwnerFilter').value = ownerSelected === 'all' || ownerSelected === 'mine' || responsibles.some(item => (item.email || item.id) === ownerSelected) ? ownerSelected : 'mine';
   $('calendarChildFilter').hidden = !isAdminTi();
   $('calendarChildFilter').innerHTML = '<option value="all">Todas crianças</option>' + childProfiles().map(child => `<option value="${child.id}">${child.avatar} ${escapeHtml(child.name)}</option>`).join('');
   $('calendarChildFilter').value = childSelected === 'all' || childProfiles().some(child => child.id === childSelected) ? childSelected : 'all';
@@ -951,7 +1073,7 @@ function renderResponsibleRoutine(){
 function calendarEventHtml(event){
   const type = eventTypeById(event.type);
   const child = event.childId ? childById(event.childId) : null;
-  const owner = event.ownerEmail ? responsibleNameFromEmail(event.ownerEmail) : 'Responsável';
+  const owner = event.ownerName || (event.ownerEmail ? responsibleNameFromEmail(event.ownerEmail) : 'Responsável');
   const canEdit = canEditCalendarEvent(event);
   return `
     <div class="calendar-event-card event-${event.type}">
@@ -980,8 +1102,11 @@ function saveCalendarEvent(){
   const existing = (appState.calendarEvents || []).find(event => event.id === editingCalendarEventId);
   if(existing && !canEditCalendarEvent(existing)) return setStatus('Você não pode editar este evento');
   const event = normalizeCalendarEvent(existing || {});
-  event.ownerUid = existing?.ownerUid || currentOwnerUid();
-  event.ownerEmail = existing?.ownerEmail || currentResponsibleEmail();
+  const owner = existing ? null : selectedResponsibleForCalendar();
+  event.ownerUid = existing?.ownerUid || owner?.uid || currentOwnerUid();
+  event.ownerEmail = existing?.ownerEmail || normalizedEmail(owner?.email || currentResponsibleEmail());
+  event.ownerName = existing?.ownerName || owner?.name || responsibleNameFromEmail(event.ownerEmail);
+  event.responsibleId = existing?.responsibleId || owner?.id || '';
   event.title = title;
   event.description = $('eventDescription').value.trim();
   event.date = selectedCalendarDate;
@@ -1126,17 +1251,14 @@ function renderMomTools(){
 function renderFamilyPanel(){
   if(!$('responsibleGrid')) return;
   const me = currentResponsibleEmail();
-  const responsibles = RESPONSIBLE_EMAILS.map(email => ({
-    email,
-    name: responsibleNameFromEmail(email),
-    active: email === me
-  }));
+  const responsibles = momProfiles();
   $('responsibleGrid').innerHTML = responsibles.map(person => `
-    <div class="responsible-card ${person.active ? 'active' : ''}">
-      <div class="responsible-avatar">${person.name.slice(0,1).toUpperCase()}</div>
+    <div class="responsible-card ${normalizedEmail(person.email) === me ? 'active' : ''}">
+      <div class="responsible-avatar">${person.avatar || person.name.slice(0,1).toUpperCase()}</div>
       <div>
-        <div class="task-name">${escapeHtml(person.name)}${person.active ? ' · você' : ''}</div>
-        <div class="task-time">${escapeHtml(person.email)}</div>
+        <div class="task-name">${escapeHtml(person.name)}${normalizedEmail(person.email) === me ? ' · você' : ''}</div>
+        <div class="task-time">${escapeHtml(person.email || 'sem e-mail')} · ${roleLabel(person.role)}${person.role === 'admin_ti' ? ' · admin_ti' : ''}</div>
+        <div class="task-time">${person.canViewChildren ? 'Pode ver crianças' : 'Sem acesso às crianças'} · ${person.linkedChildIds?.length || 0} vínculo(s)</div>
       </div>
     </div>
   `).join('');
@@ -1148,9 +1270,9 @@ function renderFamilyPanel(){
       <span>${formatShortDate(change.at)}</span>
     </div>
   `).join('') : '<div class="alert-line good">Nenhuma mudança nova de outro responsável.</div>';
-  $('inviteTarget').innerHTML = RESPONSIBLE_EMAILS
-    .filter(email => email !== me)
-    .map(email => `<option value="${email}">${escapeHtml(responsibleNameFromEmail(email))}</option>`)
+  $('inviteTarget').innerHTML = momProfiles()
+    .filter(profile => normalizedEmail(profile.email) !== me)
+    .map(profile => `<option value="${escapeAttr(profile.email || profile.id)}">${escapeHtml(profile.name)}</option>`)
     .join('');
   $('inviteRoutine').innerHTML = appState.children.map(child => `<option value="${child.id}">${child.avatar} ${escapeHtml(child.name)}</option>`).join('');
   renderProtectedControl();
@@ -1297,12 +1419,42 @@ function answerInvite(id, status){
 }
 
 function profileDetailHtml(child){
+  const responsibleExtra = child.type === 'mom' ? `
+    <div class="responsible-detail-grid">
+      <label>
+        E-mail
+        <input value="${escapeAttr(child.email || '')}" data-responsible-email="${child.id}" placeholder="email@gmail.com">
+      </label>
+      <label>
+        Papel/função
+        <select data-responsible-role="${child.id}">
+          ${responsibleRoles.map(role => `<option value="${role.id}" ${child.role===role.id?'selected':''}>${role.label}</option>`).join('')}
+        </select>
+      </label>
+      <label class="important-toggle responsible-check"><input type="checkbox" data-responsible-can-children="${child.id}" ${child.canViewChildren?'checked':''}> Pode ver crianças</label>
+    </div>
+    <label>
+      Observações
+      <textarea class="responsible-notes" data-responsible-notes="${child.id}" placeholder="Observações sobre este responsável">${escapeHtml(child.notes || '')}</textarea>
+    </label>
+    <div class="linked-children-box">
+      <div class="task-name">Crianças vinculadas</div>
+      <div class="linked-children-list">
+        ${childProfiles().map(kid => `
+          <label class="linked-child-option">
+            <input type="checkbox" data-responsible-child-link="${child.id}:${kid.id}" ${child.linkedChildIds?.includes(kid.id)?'checked':''}>
+            ${kid.avatar} ${escapeHtml(kid.name)}
+          </label>
+        `).join('') || '<div class="muted">Nenhuma criança cadastrada.</div>'}
+      </div>
+    </div>
+  ` : '';
   return `
     <div class="profile-detail-head">
       <div class="avatar">${child.avatar}</div>
       <div>
         <div class="task-name">${child.name}</div>
-        <div class="task-time">${child.type === 'mom' ? 'Rotina da família' : ageText(child)} · ⭐ ${child.stars || 0}</div>
+        <div class="task-time">${child.type === 'mom' ? `${roleLabel(child.role)} · ${child.email || 'sem e-mail'}` : ageText(child)} · ⭐ ${child.stars || 0}</div>
       </div>
     </div>
     <div class="profile-detail-grid">
@@ -1325,6 +1477,7 @@ function profileDetailHtml(child){
     <div class="profile-theme-row">
       ${profileThemes.map(theme => `<button class="profile-theme-chip ${child.profileTheme===theme.id?'active':''}" data-profile-theme="${child.id}:${theme.id}">${theme.emoji} ${theme.label}</button>`).join('')}
     </div>
+    ${responsibleExtra}
     <div class="sound-row">
       <label>
         Som do alarme
@@ -1336,7 +1489,7 @@ function profileDetailHtml(child){
     </div>
     <div class="child-card-actions">
       <button class="secondary" data-speak="${child.id}">Falar rotina</button>
-      ${child.type === 'mom' ? '' : `<button class="secondary" data-remove="${child.id}">Remover perfil</button>`}
+      ${child.type === 'mom' ? `<button class="secondary danger" data-remove="${child.id}">Excluir responsável</button>` : `<button class="secondary" data-remove="${child.id}">Remover perfil</button>`}
     </div>
   `;
 }
@@ -1381,6 +1534,17 @@ function bindChildCards(){
     renderMom();
   }));
   document.querySelectorAll('[data-profile-sound]').forEach(el => el.addEventListener('change', () => updateChild(el.dataset.profileSound, { alarmSound: el.value })));
+  document.querySelectorAll('[data-responsible-email]').forEach(el => el.addEventListener('input', () => updateResponsibleProfile(el.dataset.responsibleEmail, { email: normalizedEmail(el.value) })));
+  document.querySelectorAll('[data-responsible-role]').forEach(el => el.addEventListener('change', () => updateResponsibleProfile(el.dataset.responsibleRole, { role: el.value })));
+  document.querySelectorAll('[data-responsible-notes]').forEach(el => el.addEventListener('input', () => updateResponsibleProfile(el.dataset.responsibleNotes, { notes: el.value })));
+  document.querySelectorAll('[data-responsible-can-children]').forEach(el => el.addEventListener('change', () => updateResponsibleProfile(el.dataset.responsibleCanChildren, { canViewChildren: el.checked })));
+  document.querySelectorAll('[data-responsible-child-link]').forEach(el => el.addEventListener('change', () => {
+    const [id, childId] = el.dataset.responsibleChildLink.split(':');
+    const profile = childById(id);
+    profile.linkedChildIds = Array.isArray(profile.linkedChildIds) ? profile.linkedChildIds : [];
+    profile.linkedChildIds = el.checked ? Array.from(new Set([...profile.linkedChildIds, childId])) : profile.linkedChildIds.filter(item => item !== childId);
+    updateResponsibleProfile(id, { linkedChildIds: profile.linkedChildIds });
+  }));
   document.querySelectorAll('[data-test-sound]').forEach(el => el.addEventListener('click', () => playAlarmSound(childById(el.dataset.testSound))));
   document.querySelectorAll('[data-profile-type]').forEach(el => el.addEventListener('change', () => {
     updateChild(el.dataset.profileType, { type: el.checked ? 'mom' : 'child', profileTheme: el.checked ? 'mae' : 'bichinhos' });
@@ -1399,10 +1563,29 @@ function updateChild(id, patch){
   renderChild();
 }
 
+function updateResponsibleProfile(id, patch){
+  const profile = childById(id);
+  if(!profile || profile.type !== 'mom') return;
+  if(ADMIN_TI_EMAILS.includes(normalizedEmail(profile.email)) && patch.role && patch.role !== 'admin_ti') patch.role = 'admin_ti';
+  Object.assign(profile, patch);
+  profile.email = normalizedEmail(profile.email);
+  if(ADMIN_TI_EMAILS.includes(profile.email)){
+    profile.role = 'admin_ti';
+    profile.canViewChildren = true;
+  }
+  scheduleSave(`alterou o responsável ${profile.name}`);
+  renderResponsibleRoutine();
+  renderFamilyPanel();
+}
+
 function removeChild(id){
   if(appState.children.length <= 1) return;
   const child = childById(id);
-  if(child.type === 'mom' && appState.children.filter(child => child.type === 'mom').length <= 1) return;
+  if(child.type === 'mom'){
+    if(ADMIN_TI_EMAILS.includes(normalizedEmail(child.email))) return setStatus('Não é possível excluir a conta admin principal');
+    if(appState.children.filter(child => child.type === 'mom').length <= 1) return;
+    if(!confirm(`Excluir o responsável ${child.name}?`)) return;
+  }else if(!confirm(`Remover o perfil de ${child.name}?`)) return;
   appState.children = appState.children.filter(c => c.id !== id);
   if(selectedChildId === id) selectedChildId = childProfiles()[0]?.id || appState.children[0].id;
   if(editingChildId === id) editingChildId = '';
@@ -2184,9 +2367,12 @@ function formatLongDate(value){
 
 function addChild(){
   if(selectedProfileTab === 'mom'){
-    const profile = momProfile();
+    const profile = defaultResponsibleProfile();
+    profile.name = `Responsável ${momProfiles().length + 1}`;
+    appState.children.push(profile);
     editingChildId = profile.id;
-    renderMom();
+    scheduleSave(`adicionou o responsável ${profile.name}`);
+    renderAll();
     openEditor(profile.id);
     return;
   }
