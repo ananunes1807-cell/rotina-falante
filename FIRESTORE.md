@@ -1,6 +1,6 @@
 # Rotina Falante - Firestore
 
-Versao atual: v34.2.
+Versao atual: v34.3.
 
 O app usa Cloud Firestore para sincronizar a rotina da familia entre aparelhos. A tela tambem guarda a ultima atualizacao em `localStorage`, e o Firestore tenta manter cache offline no navegador.
 
@@ -82,7 +82,9 @@ Tambem aparece a data/hora da ultima sincronizacao bem-sucedida.
 
 ## Login Google no celular
 
-A v34.2 mostra um diagnostico no modo familia com:
+A v34.3 tenta popup/aba no celular antes do redirect, porque alguns navegadores voltam do Google sem entregar usuario para `getRedirectResult`.
+
+A tela mostra um diagnostico no inicio e no modo familia com:
 
 - resultado do `getRedirectResult`;
 - se `auth.currentUser` existe;

@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp, enableIndexedDb
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v34.2';
+const APP_VERSION = 'v34.3';
 const DEFAULT_FAMILY_CODE = 'familia-ana';
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_x3H6TE',
@@ -609,15 +609,12 @@ async function loginGoogle(){
     clearLoginError();
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-    if(isMobileDevice()){
-      markRedirectStarted();
-      await signInWithRedirect(auth, provider);
-      return;
-    }
     try{
+      setRedirectResultStatus(isMobileDevice() ? 'tentando popup no celular' : 'tentando popup no computador');
       await signInWithPopup(auth, provider);
     }catch(e){
-      setStatus('Abrindo login do Google...');
+      rememberLoginError(e);
+      setStatus('Popup não abriu. Tentando outro jeito...');
       markRedirectStarted();
       await signInWithRedirect(auth, provider);
       return;
@@ -653,7 +650,8 @@ function renderAuthBar(){
 }
 
 function renderDiagnostics(){
-  if(!$('diagnosticGrid')) return;
+  const grids = Array.from(document.querySelectorAll('.diagnostic-grid'));
+  if(!grids.length) return;
   const last = appState.lastSyncedAt ? formatShortDate(appState.lastSyncedAt) : 'ainda sem sincronização';
   const user = authUser?.email || authUser?.displayName || 'sem login';
   const currentUser = auth?.currentUser ? (auth.currentUser.email || auth.currentUser.displayName || auth.currentUser.uid) : 'não';
@@ -676,12 +674,13 @@ function renderDiagnostics(){
     ['Último erro login', loginError],
     ['Último erro Firestore/app', lastDiagnosticError || 'nenhum']
   ];
-  $('diagnosticGrid').innerHTML = rows.map(([label, value]) => `
+  const html = rows.map(([label, value]) => `
     <div class="diagnostic-item">
       <span>${label}</span>
       <strong>${escapeHtml(value)}</strong>
     </div>
   `).join('');
+  grids.forEach(grid => { grid.innerHTML = html; });
 }
 
 function cleanFamilyCode(code){

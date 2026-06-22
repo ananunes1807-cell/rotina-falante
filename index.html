@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#3d7f91">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Rotina Falante">
-  <link rel="manifest" href="./manifest.webmanifest?v=34.2">
+  <link rel="manifest" href="./manifest.webmanifest?v=34.3">
   <link rel="icon" href="./icon-192.png">
   <title>Rotina Falante</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=34.2">
+  <link rel="stylesheet" href="./styles.css?v=34.3">
 </head>
 <body>
   <div class="app-shell">
@@ -44,6 +44,10 @@
           <button class="secondary" id="clearConfigBtn">Limpar</button>
         </div>
         <p class="muted auth-hint" id="authHint">Google usa sua conta para carregar a mesma rotina em outro celular ou computador. Para compartilhar, outro responsável entra com a mesma conta ou com uma conta liberada depois.</p>
+        <div class="diagnostic-box setup-diagnostic">
+          <div class="section-title">Diagnóstico do login</div>
+          <div class="diagnostic-grid" id="setupDiagnosticGrid"></div>
+        </div>
       </section>
 
       <section class="mode-panel" id="modePanel" hidden>
@@ -267,6 +271,6 @@
     <div class="alarm-overlay" id="alarmOverlay" hidden></div>
   </div>
 
-  <script type="module" src="./app.js?v=34.2"></script>
+  <script type="module" src="./app.js?v=34.3"></script>
 </body>
 </html>
