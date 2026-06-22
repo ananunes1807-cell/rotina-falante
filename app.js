@@ -3,7 +3,7 @@ import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp, enableIndexedDb
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 
 const $ = (id) => document.getElementById(id);
-const APP_VERSION = 'v34.3';
+const APP_VERSION = 'v35';
 const DEFAULT_FAMILY_CODE = 'familia-ana';
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyCVbpOCdBe6I_sOB2zVv_9G9oUg_x3H6TE',
@@ -17,6 +17,16 @@ const DEFAULT_FIREBASE_CONFIG = {
 const RESPONSIBLE_EMAILS = [
   'anacarolinamoraisdosreis@gmail.com',
   'carlionison.43@gmail.com'
+];
+const ADMIN_TI_EMAILS = ['anacarolinamoraisdosreis@gmail.com'];
+const eventTypes = [
+  { id:'pessoal', label:'Pessoal', emoji:'💙' },
+  { id:'crianca', label:'Criança', emoji:'🧒' },
+  { id:'trabalho', label:'Trabalho', emoji:'💼' },
+  { id:'terapia', label:'Terapia', emoji:'🧩' },
+  { id:'escola', label:'Escola', emoji:'🎒' },
+  { id:'lembrete', label:'Lembrete', emoji:'🔔' },
+  { id:'outro', label:'Outro', emoji:'⭐' }
 ];
 const periods = [
   { id: 'manha', label: 'Manhã', emoji: '☀️' },
@@ -141,6 +151,9 @@ let isOnline = navigator.onLine;
 let mode = localStorage.getItem('rf_mode') || 'mom';
 let selectedChildId = localStorage.getItem('rf_selectedChild') || '';
 let selectedProfileTab = localStorage.getItem('rf_profileTab') || 'children';
+let selectedMomSection = localStorage.getItem('rf_momSection') || 'myRoutine';
+let selectedCalendarDate = localStorage.getItem('rf_calendarDate') || todayKey();
+let editingCalendarEventId = '';
 let editingChildId = '';
 let editingPeriod = 'manha';
 let editingTaskId = '';
@@ -217,6 +230,8 @@ function normalizeState(state){
   state.childProtection.childId ||= '';
   state.messages ||= {};
   state.events = Array.isArray(state.events) ? state.events.slice(-80) : [];
+  state.calendarEvents = Array.isArray(state.calendarEvents) ? state.calendarEvents : [];
+  state.calendarEvents.forEach(event => normalizeCalendarEvent(event));
   state.lastSyncedAt ||= '';
   state.children = Array.isArray(state.children) ? state.children : [];
   if(!state.children.length) state.children.push({ id: crypto.randomUUID(), type:'child', name:'Criança', birthDate:'', avatar:'⭐', profileTheme:'bichinhos', routines: emptyRoutines(), done:{} });
@@ -245,6 +260,24 @@ function normalizeState(state){
     }));
   });
   return state;
+}
+
+function normalizeCalendarEvent(event){
+  event.id ||= crypto.randomUUID();
+  event.ownerUid ||= '';
+  event.ownerEmail = normalizedEmail(event.ownerEmail);
+  event.title ||= 'Evento';
+  event.description ||= '';
+  event.date ||= todayKey();
+  event.startTime ||= '';
+  event.endTime ||= '';
+  event.type = eventTypes.some(type => type.id === event.type) ? event.type : 'pessoal';
+  event.childId ||= '';
+  event.sharedWithEmails = Array.isArray(event.sharedWithEmails) ? event.sharedWithEmails.map(normalizedEmail).filter(Boolean) : [];
+  event.createdAt ||= new Date().toISOString();
+  event.updatedAt ||= event.createdAt;
+  event.createdByUid ||= event.ownerUid || '';
+  return event;
 }
 
 function todayKey(){
@@ -303,7 +336,7 @@ async function pushState(){
     renderSyncInfo();
   }catch(e){
     rememberDiagnosticError(`Firestore: ${e.code || e.message || 'falha ao salvar'}`);
-    setStatus('Sem internet. Mostrando última atualização salva.');
+    setStatus('Sem internet. Mostrando última rotina salva.');
     renderSyncInfo();
   }
 }
@@ -324,7 +357,7 @@ function rememberDiagnosticError(text){
 function renderSyncInfo(){
   if(!$('syncInfo')) return;
   const last = appState.lastSyncedAt ? formatShortDate(appState.lastSyncedAt) : 'ainda sem sincronização';
-  const offlineText = isOnline ? '' : 'Sem internet. Mostrando última atualização salva. ';
+  const offlineText = isOnline ? '' : 'Sem internet. Mostrando última rotina salva. ';
   $('syncInfo').textContent = `${offlineText}Última sincronização: ${last}.`;
   $('syncInfo').classList.toggle('offline', !isOnline);
   renderDiagnostics();
@@ -333,7 +366,7 @@ function renderSyncInfo(){
 function updateOnlineStatus(){
   isOnline = navigator.onLine;
   if(isOnline) setStatus(remoteRef ? 'Online. Sincronizando...' : 'Online');
-  else setStatus('Sem internet. Mostrando última atualização salva.');
+  else setStatus('Sem internet. Mostrando última rotina salva.');
   renderSyncInfo();
   renderDiagnostics();
 }
@@ -403,6 +436,19 @@ function currentResponsibleEmail(){
 
 function isAuthorizedResponsible(user=authUser){
   return RESPONSIBLE_EMAILS.includes(normalizedEmail(user?.email));
+}
+
+function currentUserRole(user=authUser){
+  if(!user) return 'child';
+  return ADMIN_TI_EMAILS.includes(normalizedEmail(user.email)) ? 'admin_ti' : 'responsavel';
+}
+
+function isAdminTi(user=authUser){
+  return currentUserRole(user) === 'admin_ti';
+}
+
+function currentOwnerUid(){
+  return authUser?.uid || `email:${currentResponsibleEmail() || 'local'}`;
 }
 
 function responsibleDocRef(){
@@ -570,7 +616,7 @@ function listenToRemote(ref, label){
       appState.lastSyncedAt = new Date().toISOString();
       saveLocal();
     }
-    setStatus(snap.metadata.fromCache ? 'Sem internet. Mostrando última atualização salva.' : label, !snap.metadata.fromCache);
+    setStatus(snap.metadata.fromCache ? 'Sem internet. Mostrando última rotina salva.' : label, !snap.metadata.fromCache);
     renderSyncInfo();
   }, (e) => {
     rememberDiagnosticError(`Firestore: ${e.code || e.message || 'sem permissão'}`);
@@ -766,6 +812,10 @@ function renderMode(){
 }
 
 function renderMom(){
+  if(!isAdminTi() && selectedMomSection === 'admin') selectedMomSection = 'myRoutine';
+  renderResponsibleTabs();
+  renderResponsibleRoutine();
+  renderAdminVisibility();
   const inMomTab = selectedProfileTab === 'mom';
   renderMomDashboard();
   renderMomTools();
@@ -794,6 +844,192 @@ function renderMom(){
   bindChildCards();
   if(editingChildId) renderEditor();
   else $('routineEditor').hidden = true;
+}
+
+function renderResponsibleTabs(){
+  document.querySelectorAll('[data-mom-section]').forEach(btn => {
+    const isAdmin = btn.dataset.momSection === 'admin';
+    btn.hidden = isAdmin && !isAdminTi();
+    btn.classList.toggle('active', btn.dataset.momSection === selectedMomSection);
+    btn.onclick = () => {
+      if(btn.dataset.momSection === 'admin' && !isAdminTi()) return;
+      selectedMomSection = btn.dataset.momSection;
+      localStorage.setItem('rf_momSection', selectedMomSection);
+      renderMom();
+    };
+  });
+  if($('responsibleRoutinePanel')) $('responsibleRoutinePanel').hidden = selectedMomSection !== 'myRoutine';
+}
+
+function renderAdminVisibility(){
+  document.querySelectorAll('[data-admin-only]').forEach(el => {
+    el.hidden = !isAdminTi() || selectedMomSection !== 'admin';
+  });
+}
+
+function responsibleOptions(){
+  const known = new Map();
+  RESPONSIBLE_EMAILS.forEach(email => known.set(email, { email, label: responsibleNameFromEmail(email), uid: '' }));
+  (appState.calendarEvents || []).forEach(event => {
+    const email = normalizedEmail(event.ownerEmail);
+    if(email && !known.has(email)) known.set(email, { email, label: responsibleNameFromEmail(email), uid: event.ownerUid || '' });
+  });
+  return Array.from(known.values());
+}
+
+function eventTypeById(id){
+  return eventTypes.find(type => type.id === id) || eventTypes[0];
+}
+
+function canSeeCalendarEvent(event){
+  if(isAdminTi()) return true;
+  const uid = currentOwnerUid();
+  const email = currentResponsibleEmail();
+  return event.ownerUid === uid || normalizedEmail(event.ownerEmail) === email || (event.sharedWithEmails || []).includes(email);
+}
+
+function canEditCalendarEvent(event){
+  if(isAdminTi()) return true;
+  const uid = currentOwnerUid();
+  const email = currentResponsibleEmail();
+  return event.ownerUid === uid || normalizedEmail(event.ownerEmail) === email || event.createdByUid === uid;
+}
+
+function filteredCalendarEvents(){
+  const ownerFilter = $('calendarOwnerFilter')?.value || 'mine';
+  const childFilter = $('calendarChildFilter')?.value || 'all';
+  const typeFilter = $('calendarTypeFilter')?.value || 'all';
+  return (appState.calendarEvents || [])
+    .map(normalizeCalendarEvent)
+    .filter(event => event.date === selectedCalendarDate)
+    .filter(canSeeCalendarEvent)
+    .filter(event => {
+      if(!isAdminTi()) return true;
+      if(ownerFilter !== 'all' && ownerFilter !== 'mine' && normalizedEmail(event.ownerEmail) !== ownerFilter) return false;
+      if(ownerFilter === 'mine' && normalizedEmail(event.ownerEmail) !== currentResponsibleEmail()) return false;
+      if(childFilter !== 'all' && event.childId !== childFilter) return false;
+      if(typeFilter !== 'all' && event.type !== typeFilter) return false;
+      return true;
+    })
+    .sort((a,b) => (a.startTime || '99:99').localeCompare(b.startTime || '99:99') || a.title.localeCompare(b.title));
+}
+
+function renderResponsibleRoutine(){
+  if(!$('responsibleRoutinePanel')) return;
+  const ownerSelected = $('calendarOwnerFilter')?.value || 'mine';
+  const childSelected = $('calendarChildFilter')?.value || 'all';
+  const typeSelected = $('calendarTypeFilter')?.value || 'all';
+  const role = currentUserRole();
+  const userName = authUser?.displayName || responsibleNameFromEmail(currentResponsibleEmail()) || 'Responsável';
+  $('responsibleRoutineIntro').textContent = `${userName} · ${role === 'admin_ti' ? 'admin com acesso total' : 'responsável'} · ${formatLongDate(selectedCalendarDate)}`;
+  $('calendarDate').value = selectedCalendarDate;
+  $('eventType').innerHTML = eventTypes.map(type => `<option value="${type.id}">${type.emoji} ${type.label}</option>`).join('');
+  $('calendarTypeFilter').innerHTML = '<option value="all">Todos os tipos</option>' + eventTypes.map(type => `<option value="${type.id}">${type.emoji} ${type.label}</option>`).join('');
+  $('calendarTypeFilter').value = eventTypes.some(type => type.id === typeSelected) ? typeSelected : 'all';
+  const responsibles = responsibleOptions();
+  $('calendarOwnerFilter').hidden = !isAdminTi();
+  $('calendarOwnerFilter').innerHTML = '<option value="mine">Meus eventos</option><option value="all">Todos responsáveis</option>' + responsibles.map(item => `<option value="${item.email}">${escapeHtml(item.label)}</option>`).join('');
+  $('calendarOwnerFilter').value = ownerSelected === 'all' || ownerSelected === 'mine' || responsibles.some(item => item.email === ownerSelected) ? ownerSelected : 'mine';
+  $('calendarChildFilter').hidden = !isAdminTi();
+  $('calendarChildFilter').innerHTML = '<option value="all">Todas crianças</option>' + childProfiles().map(child => `<option value="${child.id}">${child.avatar} ${escapeHtml(child.name)}</option>`).join('');
+  $('calendarChildFilter').value = childSelected === 'all' || childProfiles().some(child => child.id === childSelected) ? childSelected : 'all';
+  $('eventChild').innerHTML = '<option value="">Sem criança vinculada</option>' + childProfiles().map(child => `<option value="${child.id}">${child.avatar} ${escapeHtml(child.name)}</option>`).join('');
+  $('eventChild').hidden = !isAdminTi();
+  const events = filteredCalendarEvents();
+  const upcoming = events.filter(event => event.startTime && timeToMinutes(event.startTime) >= new Date().getHours() * 60 + new Date().getMinutes()).length;
+  $('responsibleSummary').innerHTML = `
+    <div><strong>${events.length}</strong><span>eventos no dia</span></div>
+    <div><strong>${upcoming}</strong><span>próximos</span></div>
+    <div><strong>${role === 'admin_ti' ? 'Total' : 'Meu'}</strong><span>acesso</span></div>
+  `;
+  $('saveEventBtn').textContent = editingCalendarEventId ? 'Salvar evento' : 'Adicionar evento';
+  $('cancelEventEditBtn').hidden = !editingCalendarEventId;
+  $('responsibleEventList').innerHTML = events.length ? events.map(calendarEventHtml).join('') : '<div class="empty-state">Nenhum evento neste dia.</div>';
+  bindCalendarEvents();
+}
+
+function calendarEventHtml(event){
+  const type = eventTypeById(event.type);
+  const child = event.childId ? childById(event.childId) : null;
+  const owner = event.ownerEmail ? responsibleNameFromEmail(event.ownerEmail) : 'Responsável';
+  const canEdit = canEditCalendarEvent(event);
+  return `
+    <div class="calendar-event-card event-${event.type}">
+      <div class="calendar-event-time">${event.startTime || '--:--'}${event.endTime ? ` - ${event.endTime}` : ''}</div>
+      <div class="calendar-event-main">
+        <div class="task-name">${type.emoji} ${escapeHtml(event.title)}</div>
+        <div class="task-time">${escapeHtml(owner)}${child ? ` · ${child.avatar} ${escapeHtml(child.name)}` : ''}</div>
+        ${event.description ? `<div class="task-message">${escapeHtml(event.description)}</div>` : ''}
+      </div>
+      <div class="task-actions">
+        ${canEdit ? `<button class="secondary small-btn" data-edit-event="${event.id}">Editar</button><button class="secondary small-btn danger" data-delete-event="${event.id}">Excluir</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function bindCalendarEvents(){
+  document.querySelectorAll('[data-edit-event]').forEach(btn => btn.addEventListener('click', () => loadCalendarEvent(btn.dataset.editEvent)));
+  document.querySelectorAll('[data-delete-event]').forEach(btn => btn.addEventListener('click', () => deleteCalendarEvent(btn.dataset.deleteEvent)));
+}
+
+function saveCalendarEvent(){
+  const title = $('eventTitle').value.trim();
+  if(!title) return setStatus('Dê um título para o evento');
+  const now = new Date().toISOString();
+  const existing = (appState.calendarEvents || []).find(event => event.id === editingCalendarEventId);
+  if(existing && !canEditCalendarEvent(existing)) return setStatus('Você não pode editar este evento');
+  const event = normalizeCalendarEvent(existing || {});
+  event.ownerUid = existing?.ownerUid || currentOwnerUid();
+  event.ownerEmail = existing?.ownerEmail || currentResponsibleEmail();
+  event.title = title;
+  event.description = $('eventDescription').value.trim();
+  event.date = selectedCalendarDate;
+  event.startTime = $('eventStartTime').value;
+  event.endTime = $('eventEndTime').value;
+  event.type = $('eventType').value || 'pessoal';
+  event.childId = isAdminTi() ? $('eventChild').value : '';
+  event.updatedAt = now;
+  event.createdAt ||= now;
+  event.createdByUid ||= currentOwnerUid();
+  appState.calendarEvents ||= [];
+  if(!existing) appState.calendarEvents.push(event);
+  resetCalendarForm();
+  scheduleSave(`${existing ? 'editou' : 'adicionou'} um evento na rotina do responsável`);
+  renderResponsibleRoutine();
+}
+
+function loadCalendarEvent(id){
+  const event = (appState.calendarEvents || []).find(item => item.id === id);
+  if(!event || !canEditCalendarEvent(event)) return;
+  editingCalendarEventId = id;
+  selectedCalendarDate = event.date || todayKey();
+  localStorage.setItem('rf_calendarDate', selectedCalendarDate);
+  renderResponsibleRoutine();
+  $('eventTitle').value = event.title || '';
+  $('eventDescription').value = event.description || '';
+  $('eventStartTime').value = event.startTime || '';
+  $('eventEndTime').value = event.endTime || '';
+  $('eventType').value = event.type || 'pessoal';
+  $('eventChild').value = event.childId || '';
+  $('saveEventBtn').textContent = 'Salvar evento';
+  $('cancelEventEditBtn').hidden = false;
+}
+
+function deleteCalendarEvent(id){
+  const event = (appState.calendarEvents || []).find(item => item.id === id);
+  if(!event || !canEditCalendarEvent(event)) return;
+  appState.calendarEvents = appState.calendarEvents.filter(item => item.id !== id);
+  if(editingCalendarEventId === id) resetCalendarForm();
+  scheduleSave(`excluiu um evento da rotina do responsável`);
+  renderResponsibleRoutine();
+}
+
+function resetCalendarForm(){
+  editingCalendarEventId = '';
+  ['eventTitle','eventDescription','eventStartTime','eventEndTime'].forEach(id => { if($(id)) $(id).value = ''; });
+  if($('eventType')) $('eventType').value = 'pessoal';
+  if($('eventChild')) $('eventChild').value = '';
 }
 
 function todayAgendaItems(){
@@ -1939,6 +2175,13 @@ function formatShortDate(value){
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
+function formatLongDate(value){
+  const [year, month, day] = String(value || todayKey()).split('-').map(Number);
+  const d = new Date(year, (month || 1) - 1, day || 1);
+  if(Number.isNaN(d.getTime())) return 'hoje';
+  return `${longWeekDays[d.getDay()]}, ${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
+}
+
 function addChild(){
   if(selectedProfileTab === 'mom'){
     const profile = momProfile();
@@ -2006,6 +2249,23 @@ if($('timeAnnounceInterval')) $('timeAnnounceInterval').addEventListener('change
 if($('messageChildSelect')) $('messageChildSelect').addEventListener('change', renderMessagesPanel);
 if($('messageTypeSelect')) $('messageTypeSelect').addEventListener('change', () => renderMessagePreview({ ...childMessage($('messageChildSelect').value), type: $('messageTypeSelect').value, text: $('messageText').value }));
 if($('messageText')) $('messageText').addEventListener('input', () => renderMessagePreview({ ...childMessage($('messageChildSelect').value), type: $('messageTypeSelect').value, text: $('messageText').value }));
+if($('calendarDate')) $('calendarDate').addEventListener('change', () => {
+  selectedCalendarDate = $('calendarDate').value || todayKey();
+  localStorage.setItem('rf_calendarDate', selectedCalendarDate);
+  resetCalendarForm();
+  renderResponsibleRoutine();
+});
+if($('todayCalendarBtn')) $('todayCalendarBtn').addEventListener('click', () => {
+  selectedCalendarDate = todayKey();
+  localStorage.setItem('rf_calendarDate', selectedCalendarDate);
+  resetCalendarForm();
+  renderResponsibleRoutine();
+});
+if($('calendarOwnerFilter')) $('calendarOwnerFilter').addEventListener('change', renderResponsibleRoutine);
+if($('calendarChildFilter')) $('calendarChildFilter').addEventListener('change', renderResponsibleRoutine);
+if($('calendarTypeFilter')) $('calendarTypeFilter').addEventListener('change', renderResponsibleRoutine);
+if($('saveEventBtn')) $('saveEventBtn').addEventListener('click', saveCalendarEvent);
+if($('cancelEventEditBtn')) $('cancelEventEditBtn').addEventListener('click', () => { resetCalendarForm(); renderResponsibleRoutine(); });
 window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 document.addEventListener('click', (event) => {

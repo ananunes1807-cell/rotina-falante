@@ -49,7 +49,7 @@ h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 3rem); letter-spacing: 0; }
 p { margin: 0; }
 .muted, #syncStatus { color: var(--muted); font-weight: 800; line-height: 1.35; }
 .section-title { font-size: 1.2rem; font-weight: 900; margin-bottom: 6px; }
-.setup-panel, .routine-editor, .child-board, .settings-strip, .mom-menu, .agenda-panel, .mom-tools, .mom-card, .family-panel { background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 16px; box-shadow: var(--shadow); }
+.setup-panel, .routine-editor, .child-board, .settings-strip, .mom-menu, .agenda-panel, .mom-tools, .mom-card, .family-panel, .responsible-routine-panel { background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 16px; box-shadow: var(--shadow); }
 label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: .78rem; font-weight: 900; text-transform: uppercase; }
 textarea, input, select { width: 100%; border: 2px solid var(--line); background: #f7fbfb; color: var(--text); border-radius: 12px; padding: 12px; outline: none; }
 textarea { min-height: 132px; resize: vertical; font-family: ui-monospace, Consolas, monospace; font-size: .86rem; }
@@ -74,6 +74,24 @@ button { border: 0; border-radius: 12px; padding: 11px 14px; cursor: pointer; fo
 .menu-date { font-size: clamp(1rem, 3vw, 1.35rem); color: var(--muted); font-weight: 900; margin-top: 8px; }
 .time-speech-panel { position: relative; z-index: 1; display: grid; gap: 8px; background: rgba(255,255,255,.72); border: 2px solid var(--line); border-radius: 16px; padding: 12px; }
 .time-speech-panel label { margin: 2px 0 0; }
+.responsible-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.responsible-tabs button { background: var(--surface); border: 2px solid var(--line); color: var(--muted); }
+.responsible-tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.responsible-routine-panel { margin-bottom: 14px; }
+.calendar-toolbar { display: grid; grid-template-columns: minmax(160px, .8fr) minmax(160px, .8fr) minmax(160px, .8fr) minmax(160px, .8fr); gap: 8px; margin: 10px 0; }
+.responsible-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+.responsible-summary div { background: #f7fbfb; border: 2px solid var(--line); border-radius: 16px; padding: 12px; text-align: center; }
+.responsible-summary strong { display: block; color: var(--accent); font-size: clamp(1.5rem, 7vw, 2.4rem); line-height: 1; }
+.responsible-summary span { color: var(--muted); font-size: .82rem; font-weight: 900; }
+.calendar-event-form { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) 112px 112px minmax(130px, .65fr) minmax(130px, .7fr) auto auto; gap: 8px; align-items: center; margin: 10px 0; }
+.calendar-event-card { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: #f7fbfb; border: 2px solid var(--line); border-left: 8px solid var(--accent); border-radius: 16px; padding: 12px; margin-top: 8px; }
+.calendar-event-time { color: var(--accent); font-size: 1.1rem; font-weight: 900; }
+.calendar-event-main { display: grid; gap: 3px; }
+.event-crianca { border-left-color: #58a8d8; }
+.event-terapia { border-left-color: #8f7be8; }
+.event-escola { border-left-color: #f2bc42; }
+.event-trabalho { border-left-color: #216171; }
+.event-lembrete { border-left-color: #d85555; }
 .mom-dashboard { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .mom-card { min-height: 142px; }
 .mom-card-content { display: grid; gap: 6px; align-content: start; }
@@ -254,7 +272,11 @@ body.child-theme-active .primary, body.child-theme-active .secondary { border-ra
 .danger { color: var(--red); border-color: rgba(216,85,85,.35); }
 @media (max-width: 680px) {
   .mom-menu { grid-template-columns: 1fr; }
-  .mom-dashboard, .mom-tools, .copy-grid, .invite-form, .invite-item, .protected-form, .message-form { grid-template-columns: 1fr; }
+  .mom-dashboard, .mom-tools, .copy-grid, .invite-form, .invite-item, .protected-form, .message-form, .calendar-toolbar, .calendar-event-form, .calendar-event-card { grid-template-columns: 1fr; }
+  .responsible-tabs { grid-template-columns: 1fr; }
+  .responsible-summary { grid-template-columns: 1fr 1fr; }
+  .calendar-event-card .task-actions { justify-content: stretch; }
+  .calendar-event-card .task-actions button { width: 100%; }
   .agenda-row { grid-template-columns: 70px minmax(0, 1fr); }
   .agenda-row button { width: 100%; }
   .task-form { grid-template-columns: 62px 1fr; }

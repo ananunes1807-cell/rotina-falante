@@ -1,6 +1,6 @@
 # Rotina Falante - Firestore
 
-Versao atual: v34.3.
+Versao atual: v35.
 
 O app usa Cloud Firestore para sincronizar a rotina da familia entre aparelhos. A tela tambem guarda a ultima atualizacao em `localStorage`, e o Firestore tenta manter cache offline no navegador.
 
@@ -23,9 +23,53 @@ O documento guarda um campo `state` com:
 - `children`: perfis das criancas e responsaveis;
 - `messages`: recados individuais por `childId`;
 - `events`: registros de ajuda ou confusao;
+- `calendarEvents`: calendario interno dos responsaveis;
 - `childProtection`: configuracao do modo crianca protegido;
 - `family`: responsaveis, convites e avisos de mudanca;
 - `lastSyncedAt`: data/hora da ultima sincronizacao confirmada.
+
+## Roles
+
+A v35 usa estes papeis no app:
+
+- `admin_ti`: acesso total ao painel. A conta `anacarolinamoraisdosreis@gmail.com` e tratada como admin.
+- `responsavel`: acesso limitado a propria rotina, aos proprios eventos e ao que for autorizado/compartilhado.
+- `child`: acesso infantil, usado pelo modo crianca protegido.
+
+O `admin_ti` pode ver e editar criancas, responsaveis, rotinas, recados, eventos, configuracoes e testes. Responsaveis comuns nao devem alterar permissoes nem dados de outras contas.
+
+## Calendario interno
+
+Os eventos da aba **Minha rotina** ficam em:
+
+```js
+state.calendarEvents: [
+  {
+    id: "uuid",
+    ownerUid: "uid-do-responsavel",
+    ownerEmail: "email@exemplo.com",
+    title: "Consulta",
+    description: "Descricao curta",
+    date: "2026-06-21",
+    startTime: "14:00",
+    endTime: "15:00",
+    type: "pessoal", // pessoal, crianca, trabalho, terapia, escola, lembrete, outro
+    childId: "id-da-crianca-opcional",
+    sharedWithEmails: [],
+    createdAt: "2026-06-21T20:00:00.000Z",
+    updatedAt: "2026-06-21T20:00:00.000Z",
+    createdByUid: "uid-de-quem-criou"
+  }
+]
+```
+
+Na tela:
+
+- `admin_ti` pode filtrar por todos, responsavel, crianca e tipo.
+- `responsavel` ve eventos com `ownerUid` dele, `ownerEmail` dele ou eventos compartilhados em `sharedWithEmails`.
+- `responsavel` edita/exclui apenas eventos dele.
+
+O calendario continua dentro do mesmo documento familiar para funcionar offline junto com a rotina.
 
 ## Recados
 
@@ -75,10 +119,10 @@ O app usa tres camadas:
 Quando o aparelho fica sem internet, aparece:
 
 ```txt
-Sem internet. Mostrando ultima atualizacao salva.
+Sem internet. Mostrando ultima rotina salva.
 ```
 
-Tambem aparece a data/hora da ultima sincronizacao bem-sucedida.
+Tambem aparece a data/hora da ultima sincronizacao bem-sucedida. Como `calendarEvents` faz parte do `state`, os ultimos eventos carregados ficam no cache/localStorage.
 
 ## Login Google no celular
 
@@ -95,6 +139,17 @@ A tela mostra um diagnostico no inicio e no modo familia com:
 - ultimo erro real de login.
 
 Quando o celular volta do Google, o app mostra `Voltamos do Google, conferindo login...` antes de decidir se entrou ou se houve erro.
+
+## Permissoes esperadas
+
+Na v35, a interface aplica:
+
+- admin ve tudo;
+- responsavel comum ve a propria aba **Minha rotina**;
+- responsavel comum nao ve o painel admin;
+- crianca continua no modo crianca/protegido.
+
+Como o app ainda sincroniza um documento familiar unico, as regras abaixo liberam os responsaveis autorizados para esse documento. Para seguranca por campo/documento no Firebase, a proxima evolucao ideal e mover `calendarEvents` para subcolecoes separadas por usuario.
 
 ## Regras recomendadas
 
